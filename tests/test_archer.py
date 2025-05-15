@@ -27,14 +27,27 @@ class TestArcherAuth(unittest.TestCase):
         """Test the fallback ArcherAuth class."""
         # Define a mock fallback ArcherAuth class for testing
         class MockArcherAuth:
-            def __init__(self, username, password, instance, url=None):
-                self.username = username
-                self.password = password
-                self.instance = instance
-                self.url = url
+            def __init__(self, ins, usr, pwd, url, dom=''):
+                self.ins = ins
+                self.usr = usr
+                self.pwd = pwd
+                self.base_url = url
+                self.dom = dom
+                self.authenticated = False
             
-            def authenticate(self):
-                return True
+            def login(self):
+                self.authenticated = True
+            
+            def logout(self):
+                self.authenticated = False
+                
+            def __enter__(self):
+                self.login()
+                return self
+                
+            def __exit__(self, *args, **kwargs):
+                self.logout()
+                return False
             
             def get_sir_data(self, since_date=None):
                 return []
@@ -48,14 +61,14 @@ class TestArcherAuth(unittest.TestCase):
             auth = get_archer_auth(self.config)
             
             # Verify the instance was created with the correct parameters
-            self.assertEqual(auth.username, 'test_user')
-            self.assertEqual(auth.password, 'test_password')
-            self.assertEqual(auth.instance, 'test_instance')
-            self.assertEqual(auth.url, 'https://test.example.com/')
+            self.assertEqual(auth.ins, 'test_instance')
+            self.assertEqual(auth.usr, 'test_user')
+            self.assertEqual(auth.pwd, 'test_password')
+            self.assertEqual(auth.base_url, 'https://test.example.com/')
             
-            # Test authenticate method
-            result = auth.authenticate()
-            self.assertTrue(result)
+            # Test login method
+            auth.login()
+            self.assertTrue(auth.authenticated)
             
             # Test get_sir_data method without since_date
             result = auth.get_sir_data()
@@ -78,7 +91,7 @@ class TestArcherAuth(unittest.TestCase):
         
         # Verify ArcherAuth was called with the correct parameters
         mock_archer_auth.assert_called_once_with(
-            'test_user', 'test_password', 'test_instance', 'https://test.example.com/'
+            'test_instance', 'test_user', 'test_password', 'https://test.example.com/', ''
         )
         
         # Verify the result is the mock instance
@@ -95,7 +108,7 @@ class TestArcherAuth(unittest.TestCase):
         result = get_archer_auth({})
         
         # Verify ArcherAuth was called with empty strings
-        mock_archer_auth.assert_called_once_with('', '', '', '')
+        mock_archer_auth.assert_called_once_with('', '', '', '', '')
         
         # Verify the result is the mock instance
         self.assertEqual(result, mock_instance)
@@ -129,7 +142,7 @@ class TestArcherAuth(unittest.TestCase):
         
         # Verify ArcherAuth was called with the correct parameters
         # Missing keys should default to empty strings
-        mock_archer_auth.assert_called_once_with('test_user', '', '', '')
+        mock_archer_auth.assert_called_once_with('', 'test_user', '', '', '')
         
         # Verify the result is the mock instance
         self.assertEqual(result, mock_instance)
@@ -154,7 +167,7 @@ class TestArcherAuth(unittest.TestCase):
         
         # Verify ArcherAuth was called with only the required parameters
         mock_archer_auth.assert_called_once_with(
-            'test_user', 'test_password', 'test_instance', 'https://test.example.com/'
+            'test_instance', 'test_user', 'test_password', 'https://test.example.com/', ''
         )
         
         # Verify the result is the mock instance

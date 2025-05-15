@@ -14,14 +14,14 @@ from ..utils.logging_utils import get_logger
 # Get logger for this module
 logger = get_logger('archer.auth')
 
-# Import the ArcherAuth class from the uscis-opts package
+# Import the ArcherAuth class from the archer package
 try:
-    from opts.ArcherAuth import ArcherAuth
-    logger.info("Successfully imported ArcherAuth from uscis-opts package")
+    from archer.ArcherAuth import ArcherAuth
+    logger.info("Successfully imported ArcherAuth from archer package")
 except ImportError:
     logger.error(
-        "Could not import ArcherAuth from uscis-opts package. "
-        "Please install it using: pip install uscis-opts"
+        "Could not import ArcherAuth from archer package. "
+        "Please ensure the Archer_API package is properly installed"
     )
     
     # Define a fallback ArcherAuth class for development/testing
@@ -33,32 +33,47 @@ except ImportError:
         but does not actually connect to the Archer system.
         """
         
-        def __init__(self, username: str, password: str, instance: str, url: str = None):
+        def __init__(self, ins: str, usr: str, pwd: str, url: str, dom: str = ''):
             """
             Initialize the Archer authentication client.
             
             Args:
-                username (str): Username for Archer authentication
-                password (str): Password for Archer authentication
-                instance (str): Archer instance name
-                url (str, optional): Archer URL endpoint
+                ins (str): Archer instance name
+                usr (str): Username for Archer authentication
+                pwd (str): Password for Archer authentication
+                url (str): Archer URL endpoint
+                dom (str, optional): User domain (usually blank)
             """
-            self.username = username
-            self.password = password
-            self.instance = instance
-            self.url = url
-            logger.info(f"Initialized fallback ArcherAuth for instance: {instance}, url: {url}")
+            self.ins = ins
+            self.usr = usr
+            self.pwd = pwd
+            self.base_url = url
+            self.dom = dom
+            self.authenticated = False
+            logger.info(f"Initialized fallback ArcherAuth for instance: {ins}, url: {url}")
         
-        def authenticate(self) -> bool:
+        def login(self) -> None:
             """
-            Authenticate with the Archer system.
-            
-            Returns:
-                bool: True if authentication was successful, False otherwise
+            Login to Archer instance with credentials provided during instantiation.
             """
             logger.warning("Using fallback ArcherAuth implementation - no actual authentication performed")
-            return True
+            self.authenticated = True
         
+        def logout(self) -> None:
+            """
+            Logout of Archer instance with signed credentials received during login.
+            """
+            logger.warning("Using fallback ArcherAuth implementation - no actual logout performed")
+            self.authenticated = False
+            
+        def __enter__(self):
+            self.login()
+            return self
+            
+        def __exit__(self, *args, **kwargs):
+            self.logout()
+            return False
+            
         def get_sir_data(self, since_date=None) -> List[Dict[str, Any]]:
             """
             Retrieve Significant Incident Report (SIR) data from Archer.
@@ -93,9 +108,11 @@ def get_archer_auth(config: Dict[str, Any]) -> ArcherAuth:
     password = config.get('password', '')
     instance = config.get('instance', '')
     url = config.get('url', '')
+    domain = config.get('domain', '')
     
     try:
-        auth = ArcherAuth(username, password, instance, url)
+        # Note: Parameter order matches the original ArcherAuth class (ins, usr, pwd, url, dom)
+        auth = ArcherAuth(instance, username, password, url, domain)
         logger.info(f"Created ArcherAuth instance for instance: {instance}, url: {url}")
         return auth
     except Exception as e:
