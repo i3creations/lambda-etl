@@ -33,19 +33,21 @@ except ImportError:
         but does not actually connect to the Archer system.
         """
         
-        def __init__(self, username: str, password: str, instance: str):
+        def __init__(self, username: str, password: str, instance: str, url: str = None):
             """
             Initialize the Archer authentication client.
             
             Args:
                 username (str): Username for Archer authentication
                 password (str): Password for Archer authentication
-                instance (str): Archer instance name or URL
+                instance (str): Archer instance name
+                url (str, optional): Archer URL endpoint
             """
             self.username = username
             self.password = password
             self.instance = instance
-            logger.info(f"Initialized fallback ArcherAuth for instance: {instance}")
+            self.url = url
+            logger.info(f"Initialized fallback ArcherAuth for instance: {instance}, url: {url}")
         
         def authenticate(self) -> bool:
             """
@@ -81,7 +83,8 @@ def get_archer_auth(config: Dict[str, Any]) -> ArcherAuth:
             Required keys:
             - username: Username for Archer authentication
             - password: Password for Archer authentication
-            - instance: Archer instance name or URL
+            - instance: Archer instance name
+            - url: Archer URL endpoint
             
     Returns:
         ArcherAuth: Initialized ArcherAuth instance
@@ -89,10 +92,11 @@ def get_archer_auth(config: Dict[str, Any]) -> ArcherAuth:
     username = config.get('username', '')
     password = config.get('password', '')
     instance = config.get('instance', '')
+    url = config.get('url', '')
     
     try:
-        auth = ArcherAuth(username, password, instance)
-        logger.info(f"Created ArcherAuth instance for instance: {instance}")
+        auth = ArcherAuth(username, password, instance, url)
+        logger.info(f"Created ArcherAuth instance for instance: {instance}, url: {url}")
         return auth
     except Exception as e:
         logger.error(f"Error creating ArcherAuth instance: {str(e)}")
