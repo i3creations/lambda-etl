@@ -1,0 +1,100 @@
+Type_of_SIR,Category_Type,Sub_Category_Type,category,type,subtype,sharing
+Facilitated Apprehension and Law Enforcement,Immigration,Deportation Order,Incident,Security,Immigration Incident,Share with Tenant DHS Operations Centers
+Facilitated Apprehension and Law Enforcement,Immigration,Expired Status,Incident,Security,Immigration Incident,Share with Tenant DHS Operations Centers
+Facilitated Apprehension and Law Enforcement,Immigration,False Identity,Incident,Security,Immigration Incident,Share with Tenant DHS Operations Centers
+Facilitated Apprehension and Law Enforcement,Immigration,Illegal Status,Incident,Security,Immigration Incident,Share with Tenant DHS Operations Centers
+Facilitated Apprehension and Law Enforcement,Immigration,Marriage Fraud,Incident,Security,Immigration Incident,Share with Tenant DHS Operations Centers
+Facilitated Apprehension and Law Enforcement,Immigration,Out of Status / No Status,Incident,Security,Immigration Incident,Share with Tenant DHS Operations Centers
+Facilitated Apprehension and Law Enforcement,Immigration,Previously Deported,Incident,Security,Immigration Incident,Share with Tenant DHS Operations Centers
+Facilitated Apprehension and Law Enforcement,Non-Immigration,Active Warrant,Incident,Public Safety,Criminal Activity,Share with Tenant DHS Operations Centers
+Facilitated Apprehension and Law Enforcement,Non-Immigration,Assault / Battery,Incident,Public Safety,Criminal Activity,Share with Tenant DHS Operations Centers
+Facilitated Apprehension and Law Enforcement,Non-Immigration,Controlled Substance / Drugs,Incident,Public Safety,Criminal Activity,Share with Tenant DHS Operations Centers
+Facilitated Apprehension and Law Enforcement,Non-Immigration,Failure to Appear,Incident,Public Safety,Criminal Activity,Share with Tenant DHS Operations Centers
+Facilitated Apprehension and Law Enforcement,Non-Immigration,Fraud,Incident,Public Safety,Criminal Activity,Share with Tenant DHS Operations Centers
+Facilitated Apprehension and Law Enforcement,Non-Immigration,Interpol / Federal Apprehension,Incident,Public Safety,Criminal Activity,Share with Tenant DHS Operations Centers
+Facilitated Apprehension and Law Enforcement,Non-Immigration,Motor Vehicle Related,Incident,Public Safety,Criminal Activity,Share with Tenant DHS Operations Centers
+Facilitated Apprehension and Law Enforcement,Non-Immigration,Murder / Attempted Murder,Incident,Public Safety,Criminal Activity,Share with Tenant DHS Operations Centers
+Facilitated Apprehension and Law Enforcement,Non-Immigration,Not Reported / Other,Incident,Public Safety,Criminal Activity,Share with Tenant DHS Operations Centers
+Facilitated Apprehension and Law Enforcement,Non-Immigration,Rape / Sexual Assault,Incident,Public Safety,Criminal Activity,Share with Tenant DHS Operations Centers
+Facilitated Apprehension and Law Enforcement,Non-Immigration,Robbery /  Theft,Incident,Public Safety,Criminal Activity,Share with Tenant DHS Operations Centers
+Facilitated Apprehension and Law Enforcement,Non-Immigration,Sexual Predator,Incident,Public Safety,Criminal Activity,Share with Tenant DHS Operations Centers
+Facilitated Apprehension and Law Enforcement,Non-Immigration,Threat to Commit Terrorism,Incident,Public Safety,Criminal Activity,Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,External Factors,Animal,Incident,Infrastructure,Infrastructure (Undefined),Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,External Factors,Bomb,Incident,Infrastructure,Infrastructure (Undefined),Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,External Factors,Explosion,Incident,Infrastructure,Infrastructure (Undefined),Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,External Factors,Fire,Incident,Infrastructure,Infrastructure (Undefined),Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,External Factors,Smoke,Incident,Infrastructure,Infrastructure (Undefined),Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,External Factors,Vandalism,Incident,Infrastructure,Infrastructure (Undefined),Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,External Factors,Vehicular,Incident,Infrastructure,Infrastructure (Undefined),Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,Loss of Essential Services,Elevator Outage,Incident,Infrastructure,Infrastructure (Undefined),Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,Loss of Essential Services,HVAC,Incident,Infrastructure,Infrastructure (Undefined),Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,Loss of Essential Services,Phone/IT Network/ICT,Incident,Infrastructure,Information Technology,Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,Loss of Essential Services,Power & Energy,Incident,Infrastructure,Energy,Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,Loss of Essential Services,Scheduled Maintenance Closure,Incident,Infrastructure,Infrastructure (Undefined),Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,Loss of Essential Services,Water/Sewage/Plumbing,Incident,Infrastructure,Infrastructure (Undefined),Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,Natural Disaster,Earthquake,Incident,Natural Hazards,Earthquake,Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,Natural Disaster,Flood,Incident,Natural Hazards,Flood,Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,Natural Disaster,Hurricane,Incident,Natural Hazards,Hurricane - CAT 1,Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,Natural Disaster,Sinkholes,Incident,Natural Hazards,Natural Hazard (Generic),Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,Natural Disaster,Tropical Storm,Incident,Natural Hazards,Tropical Storm,Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,Natural Disaster,Tsunami,Incident,Natural Hazards,Tsunami,Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,Natural Disaster,Volcano,Incident,Natural Hazards,Volcano,Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,Natural Disaster,Wildfire,Incident,Public Safety,Fire (Wildland),Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,Physical Security,CCTV/IDS,Incident,Public Safety,Physical Security,Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,Physical Security,Door Unsecure,Incident,Public Safety,Physical Security,Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,Physical Security,Fire Alarm - Confirm,Incident,Public Safety,Physical Security,Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,Physical Security,Fire Alarm - False,Incident,Public Safety,Physical Security,Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,Physical Security,IDS - Confirm,Incident,Public Safety,Physical Security,Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,Physical Security,IDS - False,Incident,Public Safety,Physical Security,Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,Weather,Heatwave,Incident,Natural Hazards,Severe Weather,Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,Weather,Lightning,Incident,Natural Hazards,Severe Weather,Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,Weather,Mudslide,Incident,Natural Hazards,Severe Weather,Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,Weather,Rain Storm,Incident,Natural Hazards,Severe Weather,Share with Tenant DHS Operations Centers
+Infrastructure Impact Events,Weather,Snow / Blizzard,Incident,Natural Hazards,Winter Weather,Share with Tenant DHS Operations Centers
+Occupational Safety and Health,Death,Contractor,Incident,Employee Incident,Employee Death,Share with NOC Only
+Occupational Safety and Health,Death,Customer,Incident,Public Safety,Injury/Death,Share with Tenant DHS Operations Centers
+Occupational Safety and Health,Death,Employee,Incident,Employee Incident,Employee Death,Share with NOC Only
+Occupational Safety and Health,Death,Visitor,Incident,Public Safety,Injury/Death,Share with Tenant DHS Operations Centers
+Occupational Safety and Health,Environmental Issue,Contractor,Incident,Natural Hazards,Natural Hazard (Generic),Share with Tenant DHS Operations Centers
+Occupational Safety and Health,Environmental Issue,Customer,Incident,Natural Hazards,Natural Hazard (Generic),Share with Tenant DHS Operations Centers
+Occupational Safety and Health,Environmental Issue,Employee,Incident,Natural Hazards,Natural Hazard (Generic),Share with Tenant DHS Operations Centers
+Occupational Safety and Health,Environmental Issue,Visitor,Incident,Natural Hazards,Natural Hazard (Generic),Share with Tenant DHS Operations Centers
+Occupational Safety and Health,Medical Event,Contractor,Incident,Employee Incident,Employee Medical Event,Share with Tenant DHS Operations Centers
+Occupational Safety and Health,Medical Event,Customer,Incident,Public Safety,Medical Event,Share with Tenant DHS Operations Centers
+Occupational Safety and Health,Medical Event,Employee,Incident,Employee Incident,Employee Medical Event,Share with Tenant DHS Operations Centers
+Occupational Safety and Health,Medical Event,Visitor,Incident,Public Safety,Medical Event,Share with Tenant DHS Operations Centers
+Occupational Safety and Health,Pandemic/Epidemic,Contractor,Incident,Employee Incident,Employee Medical Event,Share with Tenant DHS Operations Centers
+Occupational Safety and Health,Pandemic/Epidemic,Customer,Incident,Public Safety,Public Health,Share with Tenant DHS Operations Centers
+Occupational Safety and Health,Pandemic/Epidemic,Employee,Incident,Employee Incident,Employee Medical Event,Share with Tenant DHS Operations Centers
+Occupational Safety and Health,Pandemic/Epidemic,Visitor,Incident,Public Safety,Public Health,Share with Tenant DHS Operations Centers
+Occupational Safety and Health,Unaccounted For / AWOL,Contractor,Incident,Employee Incident,Employee Accountability,Share with Tenant DHS Operations Centers
+Occupational Safety and Health,Unaccounted For / AWOL,Customer,Incident,Public Safety,Public Safety (Generic),Share with Tenant DHS Operations Centers
+Occupational Safety and Health,Unaccounted For / AWOL,Employee,Incident,Employee Incident,Employee Accountability,Share with Tenant DHS Operations Centers
+Occupational Safety and Health,Unaccounted For / AWOL,Visitor,Incident,Public Safety,Public Safety (Generic),Share with Tenant DHS Operations Centers
+Occupational Safety and Health,Workplace related Injury,Contractor,Incident,Employee Incident,Employee Injury,Share with Tenant DHS Operations Centers
+Occupational Safety and Health,Workplace related Injury,Customer,Incident,Public Safety,Injury/Death,Share with Tenant DHS Operations Centers
+Occupational Safety and Health,Workplace related Injury,Employee,Incident,Employee Incident,Employee Injury,Share with Tenant DHS Operations Centers
+Occupational Safety and Health,Workplace related Injury,Visitor,Incident,Public Safety,Injury/Death,Share with Tenant DHS Operations Centers
+Suspicious or Threatening Activity,Active Shooter,At Other Entity,Incident,Public Safety,Armed Violence,Share with Tenant DHS Operations Centers
+Suspicious or Threatening Activity,Active Shooter,At USCIS,Incident,Public Safety,Armed Violence,Share with Tenant DHS Operations Centers
+Suspicious or Threatening Activity,Bribery,Confirmed Bribery,Incident,Suspicious Incident,Suspicious Activity,Share with Tenant DHS Operations Centers
+Suspicious or Threatening Activity,Bribery,Suspected Bribery,Incident,Suspicious Incident,Suspicious Activity,Share with Tenant DHS Operations Centers
+Suspicious or Threatening Activity,Disturbance,Disturbance Caused by Employee / Contractor,Incident,Public Safety,Civil Disorder,Share with Tenant DHS Operations Centers
+Suspicious or Threatening Activity,Disturbance,Disturbance Caused by Visitor,Incident,Public Safety,Civil Disorder,Share with Tenant DHS Operations Centers
+Suspicious or Threatening Activity,Protest,Protest Directed at Other Government Agency or Office,Incident,Public Safety,First Amendment Activity,Share with Tenant DHS Operations Centers
+Suspicious or Threatening Activity,Protest,Protest Directed at USCIS,Incident,Public Safety,First Amendment Activity,Share with Tenant DHS Operations Centers
+Suspicious or Threatening Activity,Suspicious Activity,Actual / Suspected Surveillance,Incident,Suspicious Incident,Suspicious Activity,Share with Tenant DHS Operations Centers
+Suspicious or Threatening Activity,Suspicious Activity,Mail Room Incident,Incident,Suspicious Incident,Suspicious Activity,Share with Tenant DHS Operations Centers
+Suspicious or Threatening Activity,Suspicious Activity,Package,Incident,Suspicious Incident,Suspicious Package/Device,Share with Tenant DHS Operations Centers
+Suspicious or Threatening Activity,Suspicious Activity,Person,Incident,Suspicious Incident,Suspicious Activity,Share with Tenant DHS Operations Centers
+Suspicious or Threatening Activity,Suspicious Activity,Scam / Possible Scam,Incident,Suspicious Incident,Suspicious Activity,Share with Tenant DHS Operations Centers
+Suspicious or Threatening Activity,Suspicious Activity,Theft of Personal Items on USCIS Property,Incident,Suspicious Incident,Suspicious Activity,Share with Tenant DHS Operations Centers
+Suspicious or Threatening Activity,Suspicious Activity,Trespasser,Incident,Suspicious Incident,Suspicious Activity,Share with Tenant DHS Operations Centers
+Suspicious or Threatening Activity,Suspicious Activity,Vehicle,Incident,Suspicious Incident,Suspicious Activity,Share with Tenant DHS Operations Centers
+Suspicious or Threatening Activity,Suspicious Item,Drugs,Incident,Suspicious Incident,Suspicious Substance,Share with Tenant DHS Operations Centers
+Suspicious or Threatening Activity,Suspicious Item,Firearm,Incident,Suspicious Incident,Suspicious Package/Device,Share with Tenant DHS Operations Centers
+Suspicious or Threatening Activity,Suspicious Item,Knife,Incident,Suspicious Incident,Suspicious Package/Device,Share with Tenant DHS Operations Centers
+Suspicious or Threatening Activity,Threat,Bomb (Verbal / Written),Incident,Suspicious Incident,Bomb Threat,Share with Tenant DHS Operations Centers
+Suspicious or Threatening Activity,Threat,CBRN,Incident,Public Safety,HAZMAT,Share with Tenant DHS Operations Centers
+Suspicious or Threatening Activity,Threat,Cyber Threat,Incident,Cyber,Cyber,Share with Tenant DHS Operations Centers
+Suspicious or Threatening Activity,Threat,Physical Harm,Incident,Employee Incident,Threat Against Employee,Share with Tenant DHS Operations Centers

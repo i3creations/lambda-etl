@@ -1,0 +1,20 @@
+
+services:
+  localstack:
+    container_name: ops-api-localstack
+    image: localstack/localstack:latest
+    ports:
+      - "4566:4566"            # LocalStack Gateway
+      - "4510-4559:4510-4559"  # external services port range
+    environment:
+      - DEBUG=1
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - LAMBDA_EXECUTOR=docker
+      - LAMBDA_REMOTE_DOCKER=false
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - SERVICES=lambda,s3,ssm,events,logs,cloudwatch
+    volumes:
+      - "${LOCALSTACK_VOLUME_DIR:-./localstack-volume}:/var/lib/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
