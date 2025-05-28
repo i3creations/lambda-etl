@@ -1,0 +1,22 @@
+new_fileds = {
+  'phase': 'Monitored',
+  'dissemination': 'FOUO',
+  'trafficLightProtocol': None,
+  'authorizedBy': 'Command Center Group',
+  'overview': None,
+  'initialMedium': 'Government Database',
+  'initialOfficialSource': 'USCIS',
+  'initialMediaSource': 'Not Provided',
+  'archivesOn': 'A-LAN',
+  'impactedSectorList': None,
+  'impactedSubSectorList': None,
+  'intlThreatsIncidents': False,
+  'terrorismRelated': False,
+  'additionalReporting': None,
+  'scheduledDate': None,
+  'mediaReportDate': None,
+  'officialReportDate': None,
+  'tenantAbbreviation': 'USCIS',
+  'publishDate': None,
+  'approvedBy': 'Command Center Group'
+}

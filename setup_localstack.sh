@@ -5,10 +5,9 @@
 # of the OPS API Lambda function. It creates the necessary AWS resources in the
 # LocalStack environment, including:
 #
-# 1. S3 bucket for storing time logs
-# 2. SSM parameters for configuration
-# 3. Lambda function
-# 4. CloudWatch Events rule for scheduled execution
+# 1. SSM parameters for configuration (including time log)
+# 2. Lambda function
+# 3. CloudWatch Events rule for scheduled execution
 #
 # Usage:
 #   ./setup_localstack.sh
@@ -47,10 +46,6 @@ ENDPOINT_URL="http://localhost:4566"
 # AWS region
 REGION="us-east-1"
 
-# S3 bucket for time logs
-TIME_LOG_BUCKET="ops-api-time-logs"
-TIME_LOG_KEY="time_log.txt"
-
 # Lambda function name
 LAMBDA_FUNCTION_NAME="ops-api-lambda"
 
@@ -75,42 +70,46 @@ function wait_for_localstack() {
     local retry_interval=2
     
     for ((i=1; i<=$max_retries; i++)); do
+        # Check LocalStack health endpoint directly
+        local health_response=$(curl -s "http://localhost:4566/_localstack/health")
+        
         # Check if jq is installed
         if ! command -v jq &> /dev/null; then
             warn "jq is not installed. Using grep instead."
-            if curl -s "http://localhost:4566/_localstack/health" | grep -q "\"s3\": \"available\""; then
+            # Check for either "running" or "available" status for required services
+            if (echo "$health_response" | grep -q "\"ssm\": \"running\"" || echo "$health_response" | grep -q "\"ssm\": \"available\"") && \
+               (echo "$health_response" | grep -q "\"lambda\": \"running\"" || echo "$health_response" | grep -q "\"lambda\": \"available\"") && \
+               (echo "$health_response" | grep -q "\"s3\": \"running\"" || echo "$health_response" | grep -q "\"s3\": \"available\""); then
                 info "LocalStack is ready!"
                 return 0
             fi
         else
-            # Use curl and jq to check LocalStack health
-            if curl -s "http://localhost:4566/_localstack/health" | jq -e '.services.s3 == "available"' &> /dev/null; then
+            # Use jq to check if required services are running or available
+            if echo "$health_response" | jq -e '
+                (.services.ssm == "running" or .services.ssm == "available") and
+                (.services.lambda == "running" or .services.lambda == "available") and
+                (.services.s3 == "running" or .services.s3 == "available")
+            ' &> /dev/null; then
                 info "LocalStack is ready!"
                 # Display the health status
                 echo "LocalStack health status:"
-                curl -s "http://localhost:4566/_localstack/health" | jq
+                echo "$health_response" | jq
                 return 0
+            else
+                # Show which services are not ready
+                if command -v jq &> /dev/null; then
+                    echo "Waiting for services to be ready:"
+                    echo "$health_response" | jq '.services | {ssm, lambda, s3}'
+                fi
             fi
         fi
+        
         echo -n "."
         sleep $retry_interval
     done
     
     error "LocalStack failed to start within the expected time."
     exit 1
-}
-
-# Create an S3 bucket for storing time logs
-function create_s3_bucket() {
-    info "Creating S3 bucket: ${TIME_LOG_BUCKET}"
-    
-    # Check if bucket exists
-    if aws ${AWS_COMMON_ARGS} s3api head-bucket --bucket "${TIME_LOG_BUCKET}" 2>/dev/null; then
-        info "S3 bucket already exists: ${TIME_LOG_BUCKET}"
-    else
-        aws ${AWS_COMMON_ARGS} s3 mb "s3://${TIME_LOG_BUCKET}"
-        info "S3 bucket created: ${TIME_LOG_BUCKET}"
-    fi
 }
 
 # Create SSM parameters for configuration
@@ -122,34 +121,100 @@ function create_ssm_parameters() {
     aws ${AWS_COMMON_ARGS} ssm put-parameter --name "/ops-api/archer/password" --value "your_password" --type SecureString --overwrite
     aws ${AWS_COMMON_ARGS} ssm put-parameter --name "/ops-api/archer/instance" --value "your_instance" --type String --overwrite
     
-    # OPS Portal API settings
-    aws ${AWS_COMMON_ARGS} ssm put-parameter --name "/ops-api/ops-portal/auth-url" --value "https://gii-dev.ardentmc.net/dhsopsportal.api/api/auth/token" --type String --overwrite
-    aws ${AWS_COMMON_ARGS} ssm put-parameter --name "/ops-api/ops-portal/item-url" --value "https://gii-dev.ardentmc.net/dhsopsportal.api/api/Item" --type String --overwrite
+    # OPS Portal API settings - using --cli-input-json to avoid URL validation
+    aws ${AWS_COMMON_ARGS} ssm put-parameter --cli-input-json '{"Name": "/ops-api/ops-portal/auth-url", "Value": "https://gii-dev.ardentmc.net/dhsopsportal.api/api/auth/token", "Type": "String", "Overwrite": true}'
+    aws ${AWS_COMMON_ARGS} ssm put-parameter --cli-input-json '{"Name": "/ops-api/ops-portal/item-url", "Value": "https://gii-dev.ardentmc.net/dhsopsportal.api/api/Item", "Type": "String", "Overwrite": true}'
     aws ${AWS_COMMON_ARGS} ssm put-parameter --name "/ops-api/ops-portal/client-id" --value "your_client_id" --type SecureString --overwrite
     aws ${AWS_COMMON_ARGS} ssm put-parameter --name "/ops-api/ops-portal/client-secret" --value "your_client_secret" --type SecureString --overwrite
     aws ${AWS_COMMON_ARGS} ssm put-parameter --name "/ops-api/ops-portal/verify-ssl" --value "false" --type String --overwrite
     
+    # Time log parameter (initialize with current time)
+    aws ${AWS_COMMON_ARGS} ssm put-parameter --name "/ops-api/time-log" --value "$(date -u +"%Y-%m-%dT%H:%M:%S.%3NZ")" --type String --overwrite
+    
     info "SSM parameters created."
+}
+
+# Ensure the build directory exists
+function ensure_build_directory() {
+    local build_dir="$(dirname "$0")/build"
+    mkdir -p "${build_dir}"
+    echo "${build_dir}"
 }
 
 # Create a ZIP package of the OPS API code for Lambda deployment
 function create_zip_package() {
-    info "Creating ZIP package for Lambda deployment..."
+    # Ensure build directory exists
+    local build_dir=$(ensure_build_directory)
+    local zip_path="${build_dir}/ops_api_lambda.zip"
+    local temp_dir="${build_dir}/lambda_package"
     
-    # Create a temporary directory
-    local temp_dir=$(mktemp -d)
-    local zip_path="${temp_dir}/ops_api_lambda.zip"
+    # Log message to stderr instead of stdout
+    info "Creating ZIP package for Lambda deployment..." >&2
+    
+    # Create a temporary directory for the package
+    rm -rf "${temp_dir}"
+    mkdir -p "${temp_dir}"
+    
+    # Install dependencies into the temporary directory
+    info "Installing dependencies..." >&2
+    pip install -r requirements.txt -t "${temp_dir}" --no-cache-dir --no-user
+    
+    # Create a proper package structure to avoid numpy import issues
+    info "Creating proper package structure..." >&2
+    mkdir -p "${temp_dir}/numpy"
+    touch "${temp_dir}/numpy/__init__.py"
+    
+    # Create a __version__ attribute for numpy to fix pandas import issue
+    echo "__version__ = '1.22.0'" > "${temp_dir}/numpy/__init__.py"
+    info "Added __version__ attribute to numpy package..." >&2
+    
+    # Copy the ops_api package to the temporary directory
+    info "Copying ops_api package..." >&2
+    cp -r ops_api "${temp_dir}/"
+    
+    # Copy the config directory to the temporary directory
+    info "Copying config files..." >&2
+    cp -r config "${temp_dir}/"
+    
+    # Create the ZIP file from the temporary directory
+    info "Creating ZIP file..." >&2
+    cd "${temp_dir}"
+    ls -la
+    echo "Current directory: $(pwd)"
+    
+    # Make sure the build directory exists and is writable
+    mkdir -p "$(dirname "${zip_path}")"
+    touch "$(dirname "${zip_path}")/.write_test" && rm "$(dirname "${zip_path}")/.write_test" || {
+        error "Build directory is not writable: $(dirname "${zip_path}")" >&2
+        cd - > /dev/null
+        return 1
+    }
+    
+    # Use relative path for the zip file to avoid absolute path issues
+    local rel_zip_path="../$(basename "${zip_path}")"
+    echo "Creating zip file at: ${rel_zip_path} (which resolves to ${zip_path})"
     
     # Create the ZIP file
-    cd $(dirname "$0")
+    zip -r "${rel_zip_path}" .
+    zip_exit_code=$?
+    echo "zip command exit code: ${zip_exit_code}"
     
-    # Add the ops_api package
-    find ops_api -name "*.py" -print | zip -@ "${zip_path}"
+    # Check if the zip file was created successfully
+    if [ ${zip_exit_code} -ne 0 ]; then
+        error "Failed to create ZIP file: ${rel_zip_path}" >&2
+        cd - > /dev/null
+        return 1
+    fi
     
-    # Add the config directory
-    find config -name "*.csv" -o -name "*.ini" -print | zip -@ "${zip_path}"
+    cd - > /dev/null
     
-    info "ZIP package created: ${zip_path}"
+    # Clean up the temporary directory
+    rm -rf "${temp_dir}"
+    
+    # Log message to stderr instead of stdout
+    info "ZIP package created: ${zip_path}" >&2
+    
+    # Only output the zip path to stdout
     echo "${zip_path}"
 }
 
@@ -158,12 +223,30 @@ function create_lambda_function() {
     local zip_path=$1
     info "Creating Lambda function: ${LAMBDA_FUNCTION_NAME}"
     
+    # Create S3 bucket for Lambda code if it doesn't exist
+    local bucket_name="lambda-code-bucket"
+    info "Creating S3 bucket for Lambda code: ${bucket_name}"
+    
+    if ! aws ${AWS_COMMON_ARGS} s3api head-bucket --bucket "${bucket_name}" 2>/dev/null; then
+        aws ${AWS_COMMON_ARGS} s3 mb "s3://${bucket_name}"
+        info "S3 bucket created: ${bucket_name}"
+    else
+        info "S3 bucket already exists: ${bucket_name}"
+    fi
+    
+    # Upload ZIP file to S3
+    local s3_key="${LAMBDA_FUNCTION_NAME}.zip"
+    info "Uploading Lambda code to S3: s3://${bucket_name}/${s3_key}"
+    aws ${AWS_COMMON_ARGS} s3 cp "${zip_path}" "s3://${bucket_name}/${s3_key}"
+    info "Lambda code uploaded to S3"
+    
     # Check if the function already exists
     if aws ${AWS_COMMON_ARGS} lambda get-function --function-name "${LAMBDA_FUNCTION_NAME}" 2>/dev/null; then
         # Function exists, update it
         aws ${AWS_COMMON_ARGS} lambda update-function-code \
             --function-name "${LAMBDA_FUNCTION_NAME}" \
-            --zip-file "fileb://${zip_path}"
+            --s3-bucket "${bucket_name}" \
+            --s3-key "${s3_key}"
         info "Lambda function updated: ${LAMBDA_FUNCTION_NAME}"
     else
         # Function doesn't exist, create it
@@ -172,10 +255,9 @@ function create_lambda_function() {
             --runtime "python3.9" \
             --role "arn:aws:iam::000000000000:role/lambda-role" \
             --handler "ops_api.lambda_handler.handler" \
-            --zip-file "fileb://${zip_path}" \
+            --code "{\"S3Bucket\":\"${bucket_name}\",\"S3Key\":\"${s3_key}\"}" \
             --timeout 300 \
-            --memory-size 512 \
-            --environment "Variables={TIME_LOG_BUCKET=${TIME_LOG_BUCKET},TIME_LOG_KEY=${TIME_LOG_KEY}}"
+            --memory-size 512
         info "Lambda function created: ${LAMBDA_FUNCTION_NAME}"
     fi
 }
@@ -214,9 +296,6 @@ function main() {
     # Wait for LocalStack to be ready
     wait_for_localstack
     
-    # Create the S3 bucket
-    create_s3_bucket
-    
     # Create SSM parameters
     create_ssm_parameters
     
@@ -230,9 +309,7 @@ function main() {
     info "LocalStack environment setup complete!"
     info "You can now test the Lambda function with:"
     echo "aws --endpoint-url=${ENDPOINT_URL} lambda invoke --function-name ${LAMBDA_FUNCTION_NAME} --payload '{}' response.json"
-    
-    # Clean up temporary files
-    rm -f "${zip_path}"
+    info "Lambda package is stored at: ${zip_path}"
 }
 
 # Run the main function

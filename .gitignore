@@ -4,3 +4,4 @@ __pycache__
 /localstack-volume
 time_log.txt
 /ops_api.egg-info
+/build

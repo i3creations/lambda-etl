@@ -6,11 +6,13 @@ from the USCIS Archer system before sending it to the DHS OPS Portal.
 """
 
 import os
-import numpy as np
-import pandas as pd
+import sys
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 from pathlib import Path
+
+import pandas as pd
+import numpy as np
 
 from .field_mapping import field_names
 from .default_fields import default_fields

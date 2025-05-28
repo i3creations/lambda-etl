@@ -16,8 +16,99 @@ logger = get_logger('archer.auth')
 
 # Import the ArcherAuth class from the archer package
 try:
-    from archer.ArcherAuth import ArcherAuth
+    from archer.ArcherAuth import ArcherAuth as BaseArcherAuth
     logger.info("Successfully imported ArcherAuth from archer package")
+    
+    # Extend the ArcherAuth class to add the get_sir_data method
+    class ArcherAuth(BaseArcherAuth):
+        """
+        Extended ArcherAuth class that adds the get_sir_data method.
+        
+        This class extends the base ArcherAuth class from the archer package
+        to add functionality specific to retrieving SIR data.
+        """
+        
+        def get_sir_data(self, since_date=None) -> List[Dict[str, Any]]:
+            """
+            Retrieve Significant Incident Report (SIR) data from Archer.
+            
+            Args:
+                since_date (datetime, optional): If provided, only retrieve SIRs created
+                    or modified since this date.
+                    
+            Returns:
+                List[Dict[str, Any]]: List of SIR data records
+            """
+            # Ensure we're authenticated
+            if not self.authenticated:
+                self.login()
+                
+            try:
+                # Import the necessary classes
+                from archer.content.ContentClient import ContentClient
+                
+                # Create a ContentClient instance
+                client = ContentClient(self)
+                
+                # Get the endpoints (levels) available in Archer
+                endpoints = client.get_endpoints()
+                
+                # Define the level alias for SIR data
+                # Based on the example, it seems SIR data is stored in a level called 'Incidents'
+                sir_level_alias = 'Incidents'
+                
+                # Check if the level alias exists in the available endpoints
+                if sir_level_alias not in [endpoint.get('name') for endpoint in endpoints]:
+                    logger.warning(f"Level alias '{sir_level_alias}' not found in available endpoints")
+                    # Try to find a similar level alias
+                    for endpoint in endpoints:
+                        if 'incident' in endpoint.get('name', '').lower():
+                            sir_level_alias = endpoint.get('name')
+                            logger.info(f"Using level alias '{sir_level_alias}' instead")
+                            break
+                    else:
+                        logger.error(f"Could not find a suitable level alias for SIR data")
+                        return []
+                
+                # Get the metadata for the SIR level
+                level_data = client.get_levels_metadata([sir_level_alias])
+                
+                # Extract the SIR records
+                sir_records = level_data.get(sir_level_alias, [])
+                
+                # If since_date is provided, filter the records
+                if since_date and sir_records:
+                    # This assumes there's a field in the records that contains the creation/modification date
+                    # The field name might be different in the actual data
+                    filtered_records = []
+                    for record in sir_records:
+                        # Try to find a date field in the record
+                        record_date = None
+                        for field_name, field_value in record.items():
+                            if 'date' in field_name.lower() and field_value:
+                                try:
+                                    from datetime import datetime
+                                    # Try to parse the date string
+                                    record_date = datetime.fromisoformat(field_value.replace('Z', '+00:00'))
+                                    break
+                                except (ValueError, AttributeError):
+                                    # If parsing fails, continue to the next field
+                                    continue
+                        
+                        # If a valid date was found and it's after since_date, include the record
+                        if record_date and record_date >= since_date:
+                            filtered_records.append(record)
+                    
+                    sir_records = filtered_records
+                    logger.info(f"Filtered SIR data to {len(sir_records)} records since {since_date}")
+                
+                logger.info(f"Retrieved {len(sir_records)} SIR records from Archer")
+                return sir_records
+                
+            except Exception as e:
+                logger.exception(f"Error retrieving SIR data from Archer: {str(e)}")
+                return []
+            
 except ImportError:
     logger.error(
         "Could not import ArcherAuth from archer package. "

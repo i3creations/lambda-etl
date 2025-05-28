@@ -43,6 +43,7 @@ function check_docker() {
         exit 1
     fi
     info "Docker is running."
+    docker compose down
 }
 
 # Install dependencies
@@ -57,6 +58,13 @@ function install_dependencies() {
 # Build the package
 function build_package() {
     info "Building the package..."
+    
+    # Install the Archer_API package in development mode
+    info "Installing Archer_API package..."
+    # Use the absolute path to ensure pip can find the package
+    ARCHER_API_PATH="$(pwd)/ops_api/Archer_API"
+    python -m pip install -e "${ARCHER_API_PATH}"
+    info "Archer_API package installed."
     
     # Build package using the found Python executable
     python -m pip install -e .
@@ -77,15 +85,15 @@ function start_localstack() {
     fi
     
     # Set dummy AWS credentials for LocalStack
-    export AWS_ACCESS_KEY_ID="test"
-    export AWS_SECRET_ACCESS_KEY="test"
-    export AWS_DEFAULT_REGION="us-east-1"
+    # export AWS_ACCESS_KEY_ID="test"
+    # export AWS_SECRET_ACCESS_KEY="test"
+    # export AWS_DEFAULT_REGION="us-east-1"
 }
 
 # Set up the LocalStack environment
 function setup_localstack() {
     info "Setting up the LocalStack environment..."
-    ./setup_localstack.sh
+    ./setup_localstack.py
     info "LocalStack environment set up."
 }
 
@@ -107,6 +115,76 @@ function test_lambda_localstack() {
     info "LocalStack Lambda function test completed."
 }
 
+# Create and deploy NumPy and pandas layer
+function create_and_deploy_layer() {
+    info "Creating and deploying NumPy and pandas layer..."
+    
+    # Check if Docker is available
+    if docker info > /dev/null 2>&1; then
+        # Use Docker to build the layer (recommended)
+        info "Using Docker to build the NumPy and pandas layer..."
+        
+        # Check if build_layer_with_docker.sh exists
+        if [ -f "build_layer_with_docker.sh" ]; then
+            # Make sure it's executable
+            chmod +x build_layer_with_docker.sh
+            
+            # Run the script
+            ./build_layer_with_docker.sh
+        else
+            warn "build_layer_with_docker.sh not found, falling back to local Python..."
+            
+            # Make sure create_numpy_layer.sh is executable
+            chmod +x create_numpy_layer.sh
+            
+            # Run the script
+            ./create_numpy_layer.sh
+        fi
+    else
+        # Use local Python to build the layer
+        info "Docker not available, using local Python to build the NumPy and pandas layer..."
+        
+        # Make sure create_numpy_layer.sh is executable
+        chmod +x create_numpy_layer.sh
+        
+        # Run the script
+        ./create_numpy_layer.sh
+    fi
+    
+    # Deploy the layer to LocalStack
+    info "Deploying NumPy and pandas layer to LocalStack..."
+    
+    # Create the layer in LocalStack
+    aws --endpoint-url=http://localhost:4566 lambda publish-layer-version \
+        --layer-name numpy-pandas-layer \
+        --description "NumPy and pandas libraries for Python Lambda functions" \
+        --compatible-runtimes python3.9 \
+        --zip-file fileb://numpy-pandas-layer.zip
+    
+    # Get the ARN of the layer
+    LAYER_VERSION=$(aws --endpoint-url=http://localhost:4566 lambda list-layer-versions \
+        --layer-name numpy-pandas-layer \
+        --query 'LayerVersions[0].Version' \
+        --output text)
+    
+    LAYER_ARN=$(aws --endpoint-url=http://localhost:4566 lambda list-layer-versions \
+        --layer-name numpy-pandas-layer \
+        --query 'LayerVersions[0].LayerVersionArn' \
+        --output text)
+    
+    info "Layer ARN: $LAYER_ARN"
+    
+    # Update the Lambda function to use the layer
+    info "Updating Lambda function to use the layer..."
+    
+    # Update the Lambda function configuration to use the layer
+    aws --endpoint-url=http://localhost:4566 lambda update-function-configuration \
+        --function-name ops-api-lambda \
+        --layers $LAYER_ARN
+    
+    info "Lambda function updated to use the layer."
+}
+
 # Main function
 function main() {
     info "Starting deployment to LocalStack..."
@@ -125,6 +203,9 @@ function main() {
     
     # Set up the LocalStack environment
     setup_localstack
+    
+    # Create and deploy NumPy and pandas layer
+    create_and_deploy_layer
     
     # Test the Lambda function locally
     test_lambda_local

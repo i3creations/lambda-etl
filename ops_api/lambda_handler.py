@@ -8,6 +8,7 @@ It adapts the main functionality of the OPS API to run in an AWS Lambda environm
 import os
 import json
 import logging
+import sys
 from datetime import datetime
 from typing import Dict, Any
 
@@ -26,7 +27,6 @@ logger = Logger(service="ops-api")
 
 # Initialize AWS clients
 ssm = boto3.client('ssm')
-s3 = boto3.client('s3')
 
 
 def get_parameter(name: str, decrypt: bool = True) -> str:
@@ -87,45 +87,43 @@ def load_config_from_ssm() -> Dict[str, Any]:
     return config
 
 
-def get_time_log_from_s3(bucket: str, key: str) -> datetime:
+def get_time_log_from_ssm(parameter_name: str) -> datetime:
     """
-    Get the last run time from an S3 object.
+    Get the last run time from SSM Parameter Store.
     
     Args:
-        bucket (str): S3 bucket name
-        key (str): S3 object key
+        parameter_name (str): SSM parameter name
         
     Returns:
         datetime: Last run time
     """
     try:
-        response = s3.get_object(Bucket=bucket, Key=key)
-        content = response['Body'].read().decode('utf-8')
-        return datetime.fromisoformat(content.strip())
+        response = ssm.get_parameter(Name=parameter_name)
+        timestamp_str = response['Parameter']['Value']
+        return datetime.fromisoformat(timestamp_str.strip())
     except Exception as e:
-        logger.warning(f"Error getting time log from S3: {str(e)}. Using current time.")
+        logger.warning(f"Error getting time log from SSM: {str(e)}. Using current time.")
         return datetime.now()
 
 
-def update_time_log_in_s3(bucket: str, key: str, timestamp: datetime) -> None:
+def update_time_log_in_ssm(parameter_name: str, timestamp: datetime) -> None:
     """
-    Update the last run time in an S3 object.
+    Update the last run time in SSM Parameter Store.
     
     Args:
-        bucket (str): S3 bucket name
-        key (str): S3 object key
+        parameter_name (str): SSM parameter name
         timestamp (datetime): Timestamp to save
     """
     try:
-        s3.put_object(
-            Bucket=bucket,
-            Key=key,
-            Body=timestamp.isoformat().encode('utf-8'),
-            ContentType='text/plain'
+        ssm.put_parameter(
+            Name=parameter_name,
+            Value=timestamp.isoformat(),
+            Type='String',
+            Overwrite=True
         )
-        logger.info(f"Updated time log in S3: {timestamp.isoformat()}")
+        logger.info(f"Updated time log in SSM: {timestamp.isoformat()}")
     except Exception as e:
-        logger.error(f"Error updating time log in S3: {str(e)}")
+        logger.error(f"Error updating time log in SSM: {str(e)}")
         raise
 
 
@@ -148,10 +146,9 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         config = load_config_from_ssm()
         logger.info("Configuration loaded from SSM Parameter Store")
         
-        # Get the last run time from S3
-        s3_bucket = os.environ.get('TIME_LOG_BUCKET', 'ops-api-time-logs')
-        s3_key = os.environ.get('TIME_LOG_KEY', 'time_log.txt')
-        last_run = get_time_log_from_s3(s3_bucket, s3_key)
+        # Get the last run time from SSM
+        time_log_parameter = '/ops-api/time-log'
+        last_run = get_time_log_from_ssm(time_log_parameter)
         logger.info(f"Last run time: {last_run}")
         
         # Authenticate with Archer and get SIR data
@@ -204,9 +201,9 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         else:
             logger.info("No records to send")
         
-        # Update the last run time in S3
+        # Update the last run time in SSM
         current_time = datetime.now()
-        update_time_log_in_s3(s3_bucket, s3_key, current_time)
+        update_time_log_in_ssm(time_log_parameter, current_time)
         
         logger.info("OPS API Lambda function completed successfully")
         
