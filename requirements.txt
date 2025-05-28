@@ -1,5 +1,4 @@
-pandas>=1.0.0
-numpy>=1.18.0
+pandas>=2.2.3
 requests>=2.22.0
 pytz>=2019.3
 uscis-opts>=0.1.4
