@@ -68,6 +68,8 @@ def ensure_build_directory():
 def create_zip_package():
     """
     Create a ZIP package of the OPS API code for Lambda deployment.
+    The package will only include the core business logic, as dependencies
+    will be provided by Lambda layers.
     
     Returns:
         str: Path to the ZIP file
@@ -84,43 +86,37 @@ def create_zip_package():
         shutil.rmtree(temp_dir)
     os.makedirs(temp_dir)
     
-    # Create a temporary requirements file without NumPy and pandas
-    print("Creating temporary requirements file without NumPy and pandas...")
-    with open('requirements.txt', 'r') as f:
-        requirements = f.readlines()
-    
-    # Filter out NumPy and pandas from requirements
-    filtered_requirements = []
-    for req in requirements:
-        req_lower = req.strip().lower()
-        if not req_lower.startswith('numpy') and not req_lower.startswith('pandas'):
-            filtered_requirements.append(req)
-    
-    # Write filtered requirements to a temporary file
-    temp_req_file = os.path.join(build_dir, 'temp_requirements.txt')
-    with open(temp_req_file, 'w') as f:
-        f.writelines(filtered_requirements)
-    
-    # Install dependencies into the temporary directory (excluding NumPy and pandas)
-    print("Installing dependencies (excluding NumPy and pandas)...")
-    subprocess.check_call([
-        'pip', 'install', '-r', temp_req_file, 
-        '-t', temp_dir, '--no-cache-dir'
-    ])
-    
-    # Clean up temporary requirements file
-    os.remove(temp_req_file)
-    
-    print("NumPy and pandas will be provided by the Lambda layer...")
-    
-    # Copy the ops_api package to the temporary directory
-    print("Copying ops_api package...")
+    # Copy only the ops_api package to the temporary directory
+    # (excluding Archer_API which will be in a layer)
+    print("Copying ops_api package (excluding Archer_API)...")
     import shutil
-    shutil.copytree('ops_api', os.path.join(temp_dir, 'ops_api'))
+    
+    # Create ops_api directory structure
+    os.makedirs(os.path.join(temp_dir, 'ops_api'))
+    
+    # Copy Python files from ops_api directory
+    for item in os.listdir('ops_api'):
+        if item == 'Archer_API':
+            # Skip Archer_API as it will be in a layer
+            continue
+        
+        src_path = os.path.join('ops_api', item)
+        dst_path = os.path.join(temp_dir, 'ops_api', item)
+        
+        if os.path.isdir(src_path):
+            shutil.copytree(src_path, dst_path)
+        elif item.endswith('.py') or item == '__init__.py':
+            shutil.copy2(src_path, dst_path)
     
     # Copy the config directory to the temporary directory
     print("Copying config files...")
     shutil.copytree('config', os.path.join(temp_dir, 'config'))
+    
+    # Create an empty __init__.py file in the root directory
+    with open(os.path.join(temp_dir, '__init__.py'), 'w') as f:
+        pass
+    
+    print("Dependencies will be provided by Lambda layers...")
     
     # Create the ZIP file
     zip_path = os.path.join(build_dir, 'ops_api_lambda.zip')

@@ -197,9 +197,9 @@ ops_api/
 The OPS API can be deployed as an AWS Lambda function for serverless execution. The Lambda function is configured to run on a schedule using CloudWatch Events, and it uses the following AWS services:
 
 - **Lambda**: Executes the code in a serverless environment
+- **Lambda Layers**: Manages dependencies separately from function code
 - **CloudWatch Events**: Triggers the Lambda function on a schedule
-- **S3**: Stores the time log file to track the last run time
-- **SSM Parameter Store**: Stores configuration parameters securely
+- **SSM Parameter Store**: Stores configuration parameters and time log securely
 
 ### Lambda Handler
 
@@ -213,18 +213,57 @@ The Lambda handler function is defined in `ops_api/lambda_handler.py`. It adapts
 }
 ```
 
-## LocalStack Development Environment
+### Lambda Layers
+
+The project uses Lambda Layers to manage dependencies separately from the function code. This approach offers several benefits:
+
+1. **Reduced deployment package size**: The core function code remains small and focused on business logic
+2. **Separation of concerns**: Dependencies are managed separately from function code
+3. **Code reuse**: Layers can be shared across multiple Lambda functions
+4. **Easier updates**: Dependencies can be updated independently of function code
+
+The project uses three Lambda layers:
+
+1. **Core Dependencies Layer**: Contains common libraries like requests, pytz, boto3, and aws-lambda-powertools
+2. **Data Processing Layer**: Contains pandas and its dependencies
+3. **Custom Code Layer**: Contains the Archer API and uscis-opts libraries
+
+#### Creating Lambda Layers
+
+Two scripts are provided to create Lambda layers:
+
+1. **Using Docker (recommended)**:
+
+```bash
+./build_layers_with_docker.sh
+```
+
+This script uses Docker to build Lambda layers in an environment that matches the Lambda execution environment, ensuring compatibility.
+
+2. **Using local Python**:
+
+```bash
+./create_layers.sh
+```
+
+This script uses your local Python environment to build Lambda layers. It's faster but may have compatibility issues if your local environment differs from the Lambda execution environment.
+
+Both scripts create three layer ZIP files in the `build/layers` directory:
+- `core-dependencies-layer.zip`
+- `data-processing-layer.zip`
+- `custom-code-layer.zip`
+
+## Deployment
+
+### LocalStack Development Environment
 
 For local development and testing, you can use LocalStack to emulate AWS services. This allows you to test the Lambda function without deploying to AWS.
-
-### Setup
 
 #### Automated Setup
 
 The easiest way to set up the LocalStack environment is to use the provided deployment script:
 
 ```bash
-cd ops_api
 ./deploy_localstack.sh
 ```
 
@@ -234,7 +273,8 @@ This script automates the entire deployment process:
 3. Builds the package
 4. Starts LocalStack
 5. Sets up the LocalStack environment
-6. Tests the Lambda function locally and in LocalStack
+6. Creates and deploys Lambda layers
+7. Tests the Lambda function locally and in LocalStack
 
 #### Manual Setup
 
@@ -244,7 +284,6 @@ If you prefer to set up the environment manually:
 2. Start the LocalStack container:
 
 ```bash
-cd ops_api
 docker compose up -d
 ```
 
@@ -255,10 +294,46 @@ docker compose up -d
 ```
 
 This script creates the necessary AWS resources in the LocalStack environment, including:
-- S3 bucket for storing time logs
 - SSM parameters for configuration
 - Lambda function
 - CloudWatch Events rule for scheduled execution
+
+4. Create and deploy Lambda layers:
+
+```bash
+# Create layers using Docker
+./build_layers_with_docker.sh
+
+# Deploy layers to LocalStack
+aws --endpoint-url=http://localhost:4566 lambda publish-layer-version \
+    --layer-name core-dependencies-layer \
+    --description "Core dependencies for OPS API Lambda function" \
+    --compatible-runtimes python3.9 \
+    --zip-file fileb://build/layers/core-dependencies-layer.zip
+
+# Repeat for other layers...
+```
+
+### AWS Deployment
+
+To deploy the Lambda function to AWS:
+
+```bash
+./deploy_to_aws.sh
+```
+
+This script:
+1. Checks if AWS CLI is installed and configured
+2. Prompts for AWS region, Lambda function name, and execution role ARN
+3. Builds the package and creates Lambda layers
+4. Deploys the layers and Lambda function to AWS
+5. Sets up CloudWatch Events for scheduled execution
+6. Creates SSM parameters for configuration
+
+You'll need to provide:
+- AWS credentials with appropriate permissions
+- Lambda execution role ARN
+- Archer and OPS Portal API credentials
 
 ### Testing
 

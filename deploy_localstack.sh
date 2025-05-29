@@ -59,15 +59,16 @@ function install_dependencies() {
 function build_package() {
     info "Building the package..."
     
-    # Install the Archer_API package in development mode
+    # Install the Archer_API package
     info "Installing Archer_API package..."
     # Use the absolute path to ensure pip can find the package
     ARCHER_API_PATH="$(pwd)/ops_api/Archer_API"
-    python -m pip install -e "${ARCHER_API_PATH}"
+    python -m pip install "${ARCHER_API_PATH}"
     info "Archer_API package installed."
     
-    # Build package using the found Python executable
-    python -m pip install -e .
+    # Install the package normally instead of in development mode
+    # This avoids the file conflict error with setuptools
+    python -m pip install .
     info "Package built."
 }
 
@@ -82,24 +83,35 @@ function start_localstack() {
         # Start LocalStack using docker-compose
         docker compose up -d
         info "LocalStack started."
+        
+        # Wait for LocalStack to be ready
+        info "Waiting for LocalStack to be ready..."
+        sleep 10  # Give LocalStack some time to initialize
     fi
     
     # Set dummy AWS credentials for LocalStack
-    # export AWS_ACCESS_KEY_ID="test"
-    # export AWS_SECRET_ACCESS_KEY="test"
-    # export AWS_DEFAULT_REGION="us-east-1"
+    export AWS_ACCESS_KEY_ID="test"
+    export AWS_SECRET_ACCESS_KEY="test"
+    export AWS_DEFAULT_REGION="us-east-1"
+    info "AWS credentials set for LocalStack."
 }
 
 # Set up the LocalStack environment
 function setup_localstack() {
     info "Setting up the LocalStack environment..."
-    ./setup_localstack.py
+    # Make sure setup_localstack.py is executable
+    chmod +x setup_localstack.py
+    # Run the script
+    python setup_localstack.py
     info "LocalStack environment set up."
 }
 
 # Test the Lambda function locally
 function test_lambda_local() {
     info "Testing the Lambda function locally..."
+    
+    # Make sure test_lambda_local.py is executable
+    chmod +x test_lambda_local.py
     
     # Run test using the found Python executable
     python test_lambda_local.py
@@ -110,84 +122,134 @@ function test_lambda_local() {
 function test_lambda_localstack() {
     info "Testing the Lambda function in LocalStack..."
     
+    # Make sure test_lambda_localstack.py is executable
+    chmod +x test_lambda_localstack.py
+    
     # Run test using the found Python executable
     python test_lambda_localstack.py
     info "LocalStack Lambda function test completed."
 }
 
-# Create and deploy NumPy and pandas layer
-function create_and_deploy_layer() {
-    info "Creating and deploying NumPy and pandas layer..."
+# Create and deploy Lambda layers
+function create_and_deploy_layers() {
+    info "Creating and deploying Lambda layers..."
     
     # Check if Docker is available
     if docker info > /dev/null 2>&1; then
-        # Use Docker to build the layer (recommended)
-        info "Using Docker to build the NumPy and pandas layer..."
+        # Use Docker to build the layers (recommended)
+        info "Using Docker to build the Lambda layers..."
         
-        # Check if build_layer_with_docker.sh exists
-        if [ -f "build_layer_with_docker.sh" ]; then
-            # Make sure it's executable
-            chmod +x build_layer_with_docker.sh
-            
-            # Run the script
-            ./build_layer_with_docker.sh
-        else
-            warn "build_layer_with_docker.sh not found, falling back to local Python..."
-            
-            # Make sure create_numpy_layer.sh is executable
-            chmod +x create_numpy_layer.sh
-            
-            # Run the script
-            ./create_numpy_layer.sh
-        fi
-    else
-        # Use local Python to build the layer
-        info "Docker not available, using local Python to build the NumPy and pandas layer..."
-        
-        # Make sure create_numpy_layer.sh is executable
-        chmod +x create_numpy_layer.sh
+        # Make sure build_layers_with_docker.sh is executable
+        chmod +x build_layers_with_docker.sh
         
         # Run the script
-        ./create_numpy_layer.sh
+        ./build_layers_with_docker.sh
+    else
+        # Use local Python to build the layers
+        info "Docker not available, using local Python to build the Lambda layers..."
+        
+        # Make sure create_layers.sh is executable
+        chmod +x create_layers.sh
+        
+        # Run the script
+        ./create_layers.sh
     fi
     
-    # Deploy the layer to LocalStack
-    info "Deploying NumPy and pandas layer to LocalStack..."
+    # Deploy the layers to LocalStack
+    info "Deploying Lambda layers to LocalStack..."
     
-    # Create the layer in LocalStack
+    # Define layer paths
+    CORE_LAYER_PATH="build/layers/core-dependencies-layer.zip"
+    DATA_LAYER_PATH="build/layers/data-processing-layer.zip"
+    CUSTOM_LAYER_PATH="build/layers/custom-code-layer.zip"
+    
+    # Create the layers in LocalStack
+    info "Publishing core dependencies layer..."
     aws --endpoint-url=http://localhost:4566 lambda publish-layer-version \
-        --layer-name numpy-pandas-layer \
-        --description "NumPy and pandas libraries for Python Lambda functions" \
+        --layer-name core-dependencies-layer \
+        --description "Core dependencies for OPS API Lambda function" \
         --compatible-runtimes python3.9 \
-        --zip-file fileb://numpy-pandas-layer.zip
+        --zip-file fileb://${CORE_LAYER_PATH}
     
-    # Get the ARN of the layer
-    LAYER_VERSION=$(aws --endpoint-url=http://localhost:4566 lambda list-layer-versions \
-        --layer-name numpy-pandas-layer \
-        --query 'LayerVersions[0].Version' \
-        --output text)
+    info "Publishing data processing layer..."
+    aws --endpoint-url=http://localhost:4566 lambda publish-layer-version \
+        --layer-name data-processing-layer \
+        --description "Data processing libraries (pandas) for OPS API Lambda function" \
+        --compatible-runtimes python3.9 \
+        --zip-file fileb://${DATA_LAYER_PATH}
     
-    LAYER_ARN=$(aws --endpoint-url=http://localhost:4566 lambda list-layer-versions \
-        --layer-name numpy-pandas-layer \
+    info "Publishing custom code layer..."
+    aws --endpoint-url=http://localhost:4566 lambda publish-layer-version \
+        --layer-name custom-code-layer \
+        --description "Custom code and libraries for OPS API Lambda function" \
+        --compatible-runtimes python3.9 \
+        --zip-file fileb://${CUSTOM_LAYER_PATH}
+    
+    # Get the ARNs of the layers
+    CORE_LAYER_ARN=$(aws --endpoint-url=http://localhost:4566 lambda list-layer-versions \
+        --layer-name core-dependencies-layer \
         --query 'LayerVersions[0].LayerVersionArn' \
         --output text)
     
-    info "Layer ARN: $LAYER_ARN"
+    DATA_LAYER_ARN=$(aws --endpoint-url=http://localhost:4566 lambda list-layer-versions \
+        --layer-name data-processing-layer \
+        --query 'LayerVersions[0].LayerVersionArn' \
+        --output text)
     
-    # Update the Lambda function to use the layer
-    info "Updating Lambda function to use the layer..."
+    CUSTOM_LAYER_ARN=$(aws --endpoint-url=http://localhost:4566 lambda list-layer-versions \
+        --layer-name custom-code-layer \
+        --query 'LayerVersions[0].LayerVersionArn' \
+        --output text)
     
-    # Update the Lambda function configuration to use the layer
+    info "Core Layer ARN: $CORE_LAYER_ARN"
+    info "Data Layer ARN: $DATA_LAYER_ARN"
+    info "Custom Layer ARN: $CUSTOM_LAYER_ARN"
+    
+    # Update the Lambda function to use the layers
+    info "Updating Lambda function to use the layers..."
+    
+    # Update the Lambda function configuration to use the layers
     aws --endpoint-url=http://localhost:4566 lambda update-function-configuration \
         --function-name ops-api-lambda \
-        --layers $LAYER_ARN
+        --layers "$CORE_LAYER_ARN" "$DATA_LAYER_ARN" "$CUSTOM_LAYER_ARN"
     
-    info "Lambda function updated to use the layer."
+    info "Lambda function updated to use the layers."
 }
 
 # Main function
 function main() {
     info "Starting deployment to LocalStack..."
+    
+    # Parse command line arguments
+    local debug_mode=false
+    local skip_tests=false
+    local skip_layers=false
+    
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --debug)
+                debug_mode=true
+                shift
+                ;;
+            --skip-tests)
+                skip_tests=true
+                shift
+                ;;
+            --skip-layers)
+                skip_layers=true
+                shift
+                ;;
+            *)
+                error "Unknown option: $1"
+                echo "Usage: $0 [--debug] [--skip-tests] [--skip-layers]"
+                exit 1
+                ;;
+        esac
+    done
+    
+    if [ "$debug_mode" = true ]; then
+        info "Running in DEBUG mode"
+    fi
     
     # Check if Docker is running
     check_docker
@@ -204,14 +266,23 @@ function main() {
     # Set up the LocalStack environment
     setup_localstack
     
-    # Create and deploy NumPy and pandas layer
-    create_and_deploy_layer
+    # Create and deploy Lambda layers
+    if [ "$skip_layers" = false ]; then
+        create_and_deploy_layers
+    else
+        info "Skipping Lambda layers creation and deployment"
+    fi
     
-    # Test the Lambda function locally
-    test_lambda_local
-    
-    # Test the Lambda function in LocalStack
-    test_lambda_localstack
+    # Test the Lambda function
+    if [ "$skip_tests" = false ]; then
+        # Test the Lambda function locally
+        test_lambda_local
+        
+        # Test the Lambda function in LocalStack
+        test_lambda_localstack
+    else
+        info "Skipping Lambda function tests"
+    fi
     
     info "Deployment to LocalStack completed successfully!"
     info "You can now use the Lambda function in LocalStack."
@@ -219,5 +290,5 @@ function main() {
     echo "aws --endpoint-url=http://localhost:4566 lambda invoke --function-name ops-api-lambda --payload '{\"dry_run\": true}' response.json"
 }
 
-# Run the main function
-main
+# Run the main function with command line arguments
+main "$@"
