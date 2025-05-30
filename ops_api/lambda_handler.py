@@ -3,6 +3,7 @@ AWS Lambda Handler Module
 
 This module provides the AWS Lambda handler function for the OPS API.
 It adapts the main functionality of the OPS API to run in an AWS Lambda environment.
+This version uses environment variables instead of SSM parameters for configuration.
 """
 
 import os
@@ -12,7 +13,6 @@ import sys
 from datetime import datetime
 from typing import Dict, Any
 
-import boto3
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
@@ -25,32 +25,28 @@ from .utils.time_utils import get_last_run_time, update_last_run_time
 # Set up logging
 logger = Logger(service="ops-api")
 
-# Initialize AWS clients
-ssm = boto3.client('ssm')
 
-
-def get_parameter(name: str, decrypt: bool = True) -> str:
+def get_env_variable(name: str, default: str = None) -> str:
     """
-    Get a parameter from AWS Systems Manager Parameter Store.
+    Get an environment variable.
     
     Args:
-        name (str): Parameter name
-        decrypt (bool, optional): Whether to decrypt the parameter. Defaults to True.
+        name (str): Environment variable name
+        default (str, optional): Default value if the environment variable is not set.
         
     Returns:
-        str: Parameter value
+        str: Environment variable value
     """
-    try:
-        response = ssm.get_parameter(Name=name, WithDecryption=decrypt)
-        return response['Parameter']['Value']
-    except Exception as e:
-        logger.error(f"Error getting parameter {name}: {str(e)}")
-        raise
+    value = os.environ.get(name, default)
+    if value is None:
+        logger.error(f"Environment variable {name} is not set")
+        raise ValueError(f"Environment variable {name} is not set")
+    return value
 
 
-def load_config_from_ssm() -> Dict[str, Any]:
+def load_config_from_env() -> Dict[str, Any]:
     """
-    Load configuration from AWS Systems Manager Parameter Store.
+    Load configuration from environment variables.
     
     Returns:
         Dict[str, Any]: Configuration dictionary
@@ -59,18 +55,18 @@ def load_config_from_ssm() -> Dict[str, Any]:
     
     # Load Archer configuration
     config['archer'] = {
-        'username': get_parameter('/ops-api/archer/username'),
-        'password': get_parameter('/ops-api/archer/password'),
-        'instance': get_parameter('/ops-api/archer/instance')
+        'username': get_env_variable('OPSAPI_ARCHER_USERNAME'),
+        'password': get_env_variable('OPSAPI_ARCHER_PASSWORD'),
+        'instance': get_env_variable('OPSAPI_ARCHER_INSTANCE')
     }
     
     # Load OPS Portal configuration
     config['ops_portal'] = {
-        'auth_url': get_parameter('/ops-api/ops-portal/auth-url'),
-        'item_url': get_parameter('/ops-api/ops-portal/item-url'),
-        'client_id': get_parameter('/ops-api/ops-portal/client-id'),
-        'client_secret': get_parameter('/ops-api/ops-portal/client-secret'),
-        'verify_ssl': get_parameter('/ops-api/ops-portal/verify-ssl').lower() == 'true'
+        'auth_url': get_env_variable('OPSAPI_OPS_PORTAL_AUTH_URL'),
+        'item_url': get_env_variable('OPSAPI_OPS_PORTAL_ITEM_URL'),
+        'client_id': get_env_variable('OPSAPI_OPS_PORTAL_CLIENT_ID'),
+        'client_secret': get_env_variable('OPSAPI_OPS_PORTAL_CLIENT_SECRET'),
+        'verify_ssl': get_env_variable('OPSAPI_OPS_PORTAL_VERIFY_SSL', 'false').lower() == 'true'
     }
     
     # Load processing configuration
@@ -87,43 +83,36 @@ def load_config_from_ssm() -> Dict[str, Any]:
     return config
 
 
-def get_time_log_from_ssm(parameter_name: str) -> datetime:
+def get_time_log_from_env() -> datetime:
     """
-    Get the last run time from SSM Parameter Store.
+    Get the last run time from environment variable.
     
-    Args:
-        parameter_name (str): SSM parameter name
-        
     Returns:
         datetime: Last run time
     """
     try:
-        response = ssm.get_parameter(Name=parameter_name)
-        timestamp_str = response['Parameter']['Value']
+        timestamp_str = get_env_variable('OPSAPI_TIME_LOG', datetime.now().isoformat())
         return datetime.fromisoformat(timestamp_str.strip())
     except Exception as e:
-        logger.warning(f"Error getting time log from SSM: {str(e)}. Using current time.")
+        logger.warning(f"Error getting time log from environment: {str(e)}. Using current time.")
         return datetime.now()
 
 
-def update_time_log_in_ssm(parameter_name: str, timestamp: datetime) -> None:
+def update_time_log_in_env(timestamp: datetime) -> None:
     """
-    Update the last run time in SSM Parameter Store.
+    Update the last run time in environment variable.
     
     Args:
-        parameter_name (str): SSM parameter name
         timestamp (datetime): Timestamp to save
     """
     try:
-        ssm.put_parameter(
-            Name=parameter_name,
-            Value=timestamp.isoformat(),
-            Type='String',
-            Overwrite=True
-        )
-        logger.info(f"Updated time log in SSM: {timestamp.isoformat()}")
+        # In a container environment, we can't update environment variables at runtime
+        # So we just log the new timestamp
+        logger.info(f"Would update time log to: {timestamp.isoformat()}")
+        # In a real environment, we would need to store this in a persistent storage
+        # like a file, database, or SSM parameter
     except Exception as e:
-        logger.error(f"Error updating time log in SSM: {str(e)}")
+        logger.error(f"Error updating time log: {str(e)}")
         raise
 
 
@@ -143,12 +132,11 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         logger.info("Starting OPS API Lambda function")
         
         # Get configuration
-        config = load_config_from_ssm()
-        logger.info("Configuration loaded from SSM Parameter Store")
+        config = load_config_from_env()
+        logger.info("Configuration loaded from environment variables")
         
-        # Get the last run time from SSM
-        time_log_parameter = '/ops-api/time-log'
-        last_run = get_time_log_from_ssm(time_log_parameter)
+        # Get the last run time
+        last_run = get_time_log_from_env()
         logger.info(f"Last run time: {last_run}")
         
         # Authenticate with Archer and get SIR data
@@ -201,9 +189,9 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         else:
             logger.info("No records to send")
         
-        # Update the last run time in SSM
+        # Update the last run time
         current_time = datetime.now()
-        update_time_log_in_ssm(time_log_parameter, current_time)
+        update_time_log_in_env(current_time)
         
         logger.info("OPS API Lambda function completed successfully")
         

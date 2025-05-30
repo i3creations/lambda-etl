@@ -3,9 +3,10 @@
 # This script deploys the OPS API Lambda function to AWS.
 # It handles the entire deployment process, including:
 # 1. Building the package
-# 2. Creating Lambda layers
-# 3. Creating/updating the Lambda function
-# 4. Setting up CloudWatch Events for scheduled execution
+# 2. Creating custom Lambda layer (only for application-specific dependencies)
+# 3. Using AWS SDK for pandas managed layer for core dependencies and data processing
+# 4. Creating/updating the Lambda function
+# 5. Setting up CloudWatch Events for scheduled execution
 
 set -e  # Exit on error
 
@@ -46,6 +47,129 @@ EVENT_RULE_NAME="ops-api-schedule"
 
 # Lambda execution role
 LAMBDA_ROLE_ARN=""
+
+# Python version for Lambda
+PYTHON_VERSION="3.9"
+
+# Architecture (x86_64 or arm64)
+ARCHITECTURE="x86_64"
+
+# Get the correct AWS SDK for pandas managed layer ARN based on region, Python version, and architecture
+function get_aws_sdk_pandas_layer_arn() {
+    local region="$1"
+    local python_version="$2"
+    local architecture="$3"
+    
+    # Map Python version to the format used in layer names
+    local python_suffix
+    case "$python_version" in
+        "3.9") python_suffix="39" ;;
+        "3.10") python_suffix="310" ;;
+        "3.11") python_suffix="311" ;;
+        "3.12") python_suffix="312" ;;
+        "3.13") python_suffix="313" ;;
+        *) 
+            warn "Unsupported Python version: $python_version. Defaulting to 3.9"
+            python_suffix="39"
+            ;;
+    esac
+    
+    # Determine the layer name based on architecture
+    local layer_name
+    if [ "$architecture" = "arm64" ]; then
+        layer_name="AWSSDKPandas-Python${python_suffix}-Arm64"
+    else
+        layer_name="AWSSDKPandas-Python${python_suffix}"
+    fi
+    
+    # Get the version number based on Python version and architecture
+    local version
+    case "$python_suffix" in
+        "39")
+            if [ "$architecture" = "arm64" ]; then
+                version="29"
+            else
+                version="29"
+            fi
+            ;;
+        "310")
+            if [ "$architecture" = "arm64" ]; then
+                version="24"
+            else
+                version="24"
+            fi
+            ;;
+        "311")
+            if [ "$architecture" = "arm64" ]; then
+                version="21"
+            else
+                version="21"
+            fi
+            ;;
+        "312")
+            if [ "$architecture" = "arm64" ]; then
+                version="17"
+            else
+                version="17"
+            fi
+            ;;
+        "313")
+            if [ "$architecture" = "arm64" ]; then
+                version="2"
+            else
+                version="2"
+            fi
+            ;;
+        *) version="29" ;;
+    esac
+    
+    # Special handling for regions with different account IDs
+    local account_id
+    local arn_prefix
+    
+    if [[ "$region" == cn-* ]]; then
+        account_id="406640652441"
+        arn_prefix="arn:aws-cn:lambda"
+    elif [ "$region" = "ap-east-1" ]; then
+        account_id="839552336658"
+        arn_prefix="arn:aws:lambda"
+    elif [ "$region" = "ap-south-2" ]; then
+        account_id="246107603503"
+        arn_prefix="arn:aws:lambda"
+    elif [ "$region" = "ap-southeast-3" ]; then
+        account_id="258944054355"
+        arn_prefix="arn:aws:lambda"
+    elif [ "$region" = "ap-southeast-4" ]; then
+        account_id="945386623051"
+        arn_prefix="arn:aws:lambda"
+    elif [ "$region" = "eu-central-2" ]; then
+        account_id="956415814219"
+        arn_prefix="arn:aws:lambda"
+    elif [ "$region" = "eu-south-1" ]; then
+        account_id="774444163449"
+        arn_prefix="arn:aws:lambda"
+    elif [ "$region" = "eu-south-2" ]; then
+        account_id="982086096842"
+        arn_prefix="arn:aws:lambda"
+    elif [ "$region" = "il-central-1" ]; then
+        account_id="263840725265"
+        arn_prefix="arn:aws:lambda"
+    elif [ "$region" = "me-central-1" ]; then
+        account_id="593833071574"
+        arn_prefix="arn:aws:lambda"
+    elif [ "$region" = "me-south-1" ]; then
+        account_id="938046470361"
+        arn_prefix="arn:aws:lambda"
+    else
+        # Default account ID for most regions
+        account_id="336392948345"
+        arn_prefix="arn:aws:lambda"
+    fi
+    
+    # Construct and return the ARN
+    local arn="${arn_prefix}:${region}:${account_id}:layer:${layer_name}:${version}"
+    echo "$arn"
+}
 
 # Check if AWS CLI is installed
 function check_aws_cli() {
@@ -90,32 +214,19 @@ function build_package() {
     info "Package built."
 }
 
-# Create Lambda layers
+# Create Lambda layers using the optimized build script
 function create_layers() {
-    info "Creating Lambda layers..."
+    info "Creating Lambda layers using the optimized build script..."
     
-    # Check if Docker is available
-    if docker info > /dev/null 2>&1; then
-        # Use Docker to build the layers (recommended)
-        info "Using Docker to build the Lambda layers..."
-        
-        # Make sure build_layers_with_docker.sh is executable
-        chmod +x build_layers_with_docker.sh
-        
-        # Run the script
-        ./build_layers_with_docker.sh
+    # Run the build_layers_with_docker.sh script
+    if [ -f "build_layers_with_docker.sh" ]; then
+        info "Running build_layers_with_docker.sh..."
+        bash build_layers_with_docker.sh
+        info "Lambda layers created successfully!"
     else
-        # Use local Python to build the layers
-        info "Docker not available, using local Python to build the Lambda layers..."
-        
-        # Make sure create_layers.sh is executable
-        chmod +x create_layers.sh
-        
-        # Run the script
-        ./create_layers.sh
+        error "build_layers_with_docker.sh script not found. Please make sure it exists in the current directory."
+        exit 1
     fi
-    
-    info "Lambda layers created."
 }
 
 # Deploy Lambda layers to AWS
@@ -123,52 +234,57 @@ function deploy_layers() {
     info "Deploying Lambda layers to AWS..."
     
     # Define layer paths
-    CORE_LAYER_PATH="build/layers/core-dependencies-layer.zip"
-    DATA_LAYER_PATH="build/layers/data-processing-layer.zip"
-    CUSTOM_LAYER_PATH="build/layers/custom-code-layer.zip"
+    ARCHER_LAYER_PATH="build/layers/archer-layer.zip"
+    OPS_API_LAYER_PATH="build/layers/ops-api-layer.zip"
     
     # Check if the layer files exist
-    if [ ! -f "${CORE_LAYER_PATH}" ] || [ ! -f "${DATA_LAYER_PATH}" ] || [ ! -f "${CUSTOM_LAYER_PATH}" ]; then
-        error "Layer files not found. Please run create_layers.sh or build_layers_with_docker.sh first."
+    if [ ! -f "${ARCHER_LAYER_PATH}" ]; then
+        error "Archer layer file not found. Please run build_layers_with_docker.sh first."
         exit 1
     fi
     
-    # Publish the layers to AWS
-    info "Publishing core dependencies layer..."
-    CORE_LAYER_ARN=$(aws lambda publish-layer-version \
-        --layer-name core-dependencies-layer \
-        --description "Core dependencies for OPS API Lambda function" \
-        --compatible-runtimes python3.9 \
-        --zip-file fileb://${CORE_LAYER_PATH} \
+    if [ ! -f "${OPS_API_LAYER_PATH}" ]; then
+        error "OPS API layer file not found. Please run build_layers_with_docker.sh first."
+        exit 1
+    fi
+    
+    # Publish the Archer layer to AWS
+    info "Publishing Archer layer..."
+    ARCHER_LAYER_ARN=$(aws lambda publish-layer-version \
+        --layer-name archer-layer \
+        --description "Archer API for OPS API Lambda function" \
+        --compatible-runtimes python${PYTHON_VERSION} \
+        --zip-file fileb://${ARCHER_LAYER_PATH} \
         --query 'LayerVersionArn' \
         --output text)
     
-    info "Publishing data processing layer..."
-    DATA_LAYER_ARN=$(aws lambda publish-layer-version \
-        --layer-name data-processing-layer \
-        --description "Data processing libraries (pandas) for OPS API Lambda function" \
-        --compatible-runtimes python3.9 \
-        --zip-file fileb://${DATA_LAYER_PATH} \
+    info "Archer Layer ARN: $ARCHER_LAYER_ARN"
+    
+    # Publish the OPS API layer to AWS
+    info "Publishing OPS API layer..."
+    OPS_API_LAYER_ARN=$(aws lambda publish-layer-version \
+        --layer-name ops-api-layer \
+        --description "OPS API modules for Lambda function" \
+        --compatible-runtimes python${PYTHON_VERSION} \
+        --zip-file fileb://${OPS_API_LAYER_PATH} \
         --query 'LayerVersionArn' \
         --output text)
     
-    info "Publishing custom code layer..."
-    CUSTOM_LAYER_ARN=$(aws lambda publish-layer-version \
-        --layer-name custom-code-layer \
-        --description "Custom code and libraries for OPS API Lambda function" \
-        --compatible-runtimes python3.9 \
-        --zip-file fileb://${CUSTOM_LAYER_PATH} \
-        --query 'LayerVersionArn' \
-        --output text)
+    info "OPS API Layer ARN: $OPS_API_LAYER_ARN"
     
-    info "Core Layer ARN: $CORE_LAYER_ARN"
-    info "Data Layer ARN: $DATA_LAYER_ARN"
-    info "Custom Layer ARN: $CUSTOM_LAYER_ARN"
+    # Get the AWS SDK for pandas managed layer ARN
+    info "Getting AWS SDK for pandas managed layer ARN..."
+    
+    # Use the correct ARN for the AWS SDK for pandas managed layer
+    # Based on the region, Python version, and architecture
+    AWS_SDK_PANDAS_LAYER_ARN=$(get_aws_sdk_pandas_layer_arn "$AWS_REGION" "$PYTHON_VERSION" "$ARCHITECTURE")
+    
+    info "AWS SDK for pandas Layer ARN: $AWS_SDK_PANDAS_LAYER_ARN"
     
     # Export the layer ARNs for later use
-    export CORE_LAYER_ARN
-    export DATA_LAYER_ARN
-    export CUSTOM_LAYER_ARN
+    export ARCHER_LAYER_ARN
+    export OPS_API_LAYER_ARN
+    export AWS_SDK_PANDAS_LAYER_ARN
     
     info "Lambda layers deployed to AWS."
 }
@@ -254,7 +370,7 @@ function deploy_lambda_function() {
         # Update the function configuration to use the layers
         aws lambda update-function-configuration \
             --function-name "${LAMBDA_FUNCTION_NAME}" \
-            --layers "${CORE_LAYER_ARN}" "${DATA_LAYER_ARN}" "${CUSTOM_LAYER_ARN}"
+            --layers "${AWS_SDK_PANDAS_LAYER_ARN}" "${ARCHER_LAYER_ARN}" "${OPS_API_LAYER_ARN}"
         
         info "Lambda function updated: ${LAMBDA_FUNCTION_NAME}"
     else
@@ -270,13 +386,13 @@ function deploy_lambda_function() {
         # Create the function
         aws lambda create-function \
             --function-name "${LAMBDA_FUNCTION_NAME}" \
-            --runtime "python3.9" \
+            --runtime "python${PYTHON_VERSION}" \
             --role "${LAMBDA_ROLE_ARN}" \
             --handler "ops_api.lambda_handler.handler" \
             --zip-file "fileb://${zip_path}" \
             --timeout 300 \
             --memory-size 512 \
-            --layers "${CORE_LAYER_ARN}" "${DATA_LAYER_ARN}" "${CUSTOM_LAYER_ARN}"
+            --layers "${AWS_SDK_PANDAS_LAYER_ARN}" "${ARCHER_LAYER_ARN}" "${OPS_API_LAYER_ARN}"
         
         info "Lambda function created: ${LAMBDA_FUNCTION_NAME}"
     fi
@@ -405,7 +521,7 @@ function create_ssm_parameters() {
 
 # Main function
 function main() {
-    info "Starting deployment to AWS..."
+    info "Starting deployment to AWS using AWS SDK for pandas managed layer..."
     
     # Check if AWS CLI is installed and configured
     check_aws_cli
@@ -426,6 +542,20 @@ function main() {
     
     if [ -z "${LAMBDA_ROLE_ARN}" ]; then
         error "Lambda execution role ARN is required."
+        exit 1
+    fi
+    
+    # Prompt for Python version
+    read -p "Enter Python version (default: ${PYTHON_VERSION}): " input_python_version
+    PYTHON_VERSION=${input_python_version:-${PYTHON_VERSION}}
+    
+    # Prompt for architecture
+    read -p "Enter architecture (x86_64 or arm64, default: ${ARCHITECTURE}): " input_architecture
+    ARCHITECTURE=${input_architecture:-${ARCHITECTURE}}
+    
+    # Validate architecture
+    if [ "${ARCHITECTURE}" != "x86_64" ] && [ "${ARCHITECTURE}" != "arm64" ]; then
+        error "Invalid architecture. Must be either x86_64 or arm64."
         exit 1
     fi
     

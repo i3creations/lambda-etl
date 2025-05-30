@@ -86,11 +86,9 @@ EOF
     info "Removing the container..."
     docker rm lambda-layer-core-deps-container
     
-    # Create ZIP file
-    info "Creating ZIP file..."
-    cd "${build_dir}/core-dependencies"
-    zip -r "../core-dependencies-layer.zip" .
-    cd - > /dev/null
+    # Create ZIP file using Docker
+    info "Creating ZIP file using Docker..."
+    docker run --rm -v "${build_dir}:/data" -w /data alpine:latest sh -c "apk add --no-cache zip && cd core-dependencies && zip -r ../core-dependencies-layer.zip ."
     
     # Clean up
     rm -f Dockerfile.layer requirements-core.txt
@@ -98,125 +96,184 @@ EOF
     info "Core dependencies layer created: ${build_dir}/../core-dependencies-layer.zip"
 }
 
-# Create data processing layer using Docker
-function create_data_processing_layer() {
-    info "Creating data processing layer using Docker..."
+# Note: We no longer create a custom data processing layer with pandas
+# Instead, we use the AWS managed layer for AWS SDK for pandas
+# This provides better performance, smaller deployment size, and automatic updates
+
+# Create archer layer
+function create_archer_layer() {
+    info "Creating Archer API layer..."
     
     local build_dir=$(ensure_build_directory)
-    local docker_build_dir="/tmp/build"
+    local layer_dir="${build_dir}/archer-layer"
+    local python_dir="${layer_dir}/python"
     
-    # Create a temporary Dockerfile
-    cat > Dockerfile.layer << EOF
-FROM public.ecr.aws/lambda/python:3.9
-
-# Copy requirements file
-COPY requirements-data.txt /tmp/requirements.txt
-
-# Install dependencies
-RUN pip install -r /tmp/requirements.txt -t ${docker_build_dir}/python --no-cache-dir
-
-# Create the layer structure
-RUN mkdir -p ${docker_build_dir}
-
-# Set permissions
-RUN chmod -R 755 ${docker_build_dir}
-EOF
-
-    # Create requirements file for data processing dependencies
-    cat > requirements-data.txt << EOF
-pandas>=2.2.3
-EOF
-
-    # Build the Docker image
-    info "Building Docker image for data processing layer..."
-    docker build -t lambda-layer-data-proc -f Dockerfile.layer .
+    # Clean up previous build
+    rm -rf "${layer_dir}"
+    mkdir -p "${python_dir}/archer"
     
-    # Create a container from the image
-    info "Creating container from the image..."
-    docker create --name lambda-layer-data-proc-container lambda-layer-data-proc
+    # Create archer directory structure
+    mkdir -p "${python_dir}/archer/content"
+    mkdir -p "${python_dir}/archer/restful/content"
+    mkdir -p "${python_dir}/archer/restful/metadata"
+    mkdir -p "${python_dir}/archer/templates"
+    mkdir -p "${python_dir}/archer/web_services"
     
-    # Copy the layer files from the container
-    info "Copying layer files from the container..."
-    docker cp lambda-layer-data-proc-container:${docker_build_dir} "${build_dir}/data-processing"
+    info "Copying only essential Archer_API files..."
     
-    # Remove the container
-    info "Removing the container..."
-    docker rm lambda-layer-data-proc-container
+    # Copy only the absolutely essential Python files
+    cp ops_api/Archer_API/src/archer/__init__.py "${python_dir}/archer/"
+    cp ops_api/Archer_API/src/archer/ArcherAuth.py "${python_dir}/archer/"
+    cp ops_api/Archer_API/src/archer/ArcherClient.py "${python_dir}/archer/"
     
-    # Create ZIP file
-    info "Creating ZIP file..."
-    cd "${build_dir}/data-processing"
-    zip -r "../data-processing-layer.zip" .
-    cd - > /dev/null
+    # Only copy the most essential files from each subdirectory
+    cp ops_api/Archer_API/src/archer/content/__init__.py "${python_dir}/archer/content/"
+    cp ops_api/Archer_API/src/archer/content/ContentClient.py "${python_dir}/archer/content/"
     
-    # Clean up
-    rm -f Dockerfile.layer requirements-data.txt
+    cp ops_api/Archer_API/src/archer/restful/__init__.py "${python_dir}/archer/restful/"
+    cp ops_api/Archer_API/src/archer/restful/RestfulClient.py "${python_dir}/archer/restful/"
     
-    info "Data processing layer created: ${build_dir}/../data-processing-layer.zip"
+    cp ops_api/Archer_API/src/archer/restful/content/__init__.py "${python_dir}/archer/restful/content/"
+    cp ops_api/Archer_API/src/archer/restful/content/Content.py "${python_dir}/archer/restful/content/"
+    
+    cp ops_api/Archer_API/src/archer/restful/metadata/__init__.py "${python_dir}/archer/restful/metadata/"
+    cp ops_api/Archer_API/src/archer/restful/metadata/Application.py "${python_dir}/archer/restful/metadata/"
+    
+    cp ops_api/Archer_API/src/archer/templates/__init__.py "${python_dir}/archer/templates/"
+    cp ops_api/Archer_API/src/archer/templates/ExecuteSearch.xml "${python_dir}/archer/templates/"
+    
+    cp ops_api/Archer_API/src/archer/web_services/__init__.py "${python_dir}/archer/web_services/"
+    cp ops_api/Archer_API/src/archer/web_services/WebServicesClient.py "${python_dir}/archer/web_services/"
+    
+    # Set permissions
+    chmod -R 755 "${layer_dir}"
+    
+    # Create ZIP file with maximum compression using Docker
+    info "Creating ZIP file with maximum compression using Docker..."
+    docker run --rm -v "${build_dir}:/data" -w /data alpine:latest sh -c "apk add --no-cache zip && cd archer-layer && zip -r -9 ../archer-layer.zip ."
+    
+    # Get the size of the ZIP file
+    local zip_size=$(du -h "${build_dir}/archer-layer.zip" | cut -f1)
+    local zip_size_bytes=$(stat -c %s "${build_dir}/archer-layer.zip")
+    info "Archer layer size: ${zip_size} (${zip_size_bytes} bytes)"
+    
+    info "Archer layer created: ${build_dir}/archer-layer.zip"
 }
 
-# Create custom code layer using Docker
-function create_custom_code_layer() {
-    info "Creating custom code layer using Docker..."
+# Create ops-api layer
+function create_ops_api_layer() {
+    info "Creating OPS API layer..."
     
     local build_dir=$(ensure_build_directory)
-    local docker_build_dir="/tmp/build"
+    local layer_dir="${build_dir}/ops-api-layer"
+    local python_dir="${layer_dir}/python"
     
-    # Create a temporary directory for the Archer_API package
-    mkdir -p "${build_dir}/archer_api_tmp"
-    cp -r ops_api/Archer_API/* "${build_dir}/archer_api_tmp/"
+    # Clean up previous build
+    rm -rf "${layer_dir}"
+    mkdir -p "${python_dir}"
     
-    # Create a temporary Dockerfile
-    cat > Dockerfile.layer << EOF
-FROM public.ecr.aws/lambda/python:3.9
+    # Copy ops_api modules directly instead of using uscis-opts package
+    info "Copying ops_api modules directly..."
+    
+    # Create ops_portal directory
+    mkdir -p "${python_dir}/ops_portal"
+    cp ops_api/ops_portal/__init__.py "${python_dir}/ops_portal/"
+    cp ops_api/ops_portal/api.py "${python_dir}/ops_portal/"
+    
+    # Create processing directory
+    mkdir -p "${python_dir}/processing"
+    cp ops_api/processing/__init__.py "${python_dir}/processing/"
+    cp ops_api/processing/field_mapping.py "${python_dir}/processing/"
+    cp ops_api/processing/html_stripper.py "${python_dir}/processing/"
+    cp ops_api/processing/preprocess.py "${python_dir}/processing/"
+    
+    # Create utils directory
+    mkdir -p "${python_dir}/utils"
+    cp ops_api/utils/__init__.py "${python_dir}/utils/"
+    cp ops_api/utils/logging_utils.py "${python_dir}/utils/"
+    cp ops_api/utils/time_utils.py "${python_dir}/utils/"
+    
+    # Set permissions
+    chmod -R 755 "${layer_dir}"
+    
+    # Create ZIP file with maximum compression using Docker
+    info "Creating ZIP file with maximum compression using Docker..."
+    docker run --rm -v "${build_dir}:/data" -w /data alpine:latest sh -c "apk add --no-cache zip && cd ops-api-layer && zip -r -9 ../ops-api-layer.zip ."
+    
+    # Get the size of the ZIP file
+    local zip_size=$(du -h "${build_dir}/ops-api-layer.zip" | cut -f1)
+    local zip_size_bytes=$(stat -c %s "${build_dir}/ops-api-layer.zip")
+    info "OPS API layer size: ${zip_size} (${zip_size_bytes} bytes)"
+    
+    info "OPS API layer created: ${build_dir}/ops-api-layer.zip"
+}
 
-# Copy requirements file and Archer_API package
-COPY requirements-custom.txt /tmp/requirements.txt
-COPY ${build_dir}/archer_api_tmp /tmp/Archer_API
+# Create custom code layer (for backward compatibility)
+function create_custom_code_layer() {
+    info "Creating custom code layer (split into separate layers)..."
+    
+    # Create the individual layers
+    create_archer_layer
+    create_ops_api_layer
+    
+    info "Custom code layers created successfully!"
+}
 
-# Install dependencies
-RUN pip install -r /tmp/requirements.txt -t ${docker_build_dir}/python --no-cache-dir
-RUN pip install /tmp/Archer_API -t ${docker_build_dir}/python --no-cache-dir
-
-# Create the layer structure
-RUN mkdir -p ${docker_build_dir}
-
-# Set permissions
-RUN chmod -R 755 ${docker_build_dir}
-EOF
-
-    # Create requirements file for custom code dependencies
-    cat > requirements-custom.txt << EOF
-uscis-opts>=0.1.4
-EOF
-
-    # Build the Docker image
-    info "Building Docker image for custom code layer..."
-    docker build -t lambda-layer-custom-code -f Dockerfile.layer .
+# Create pandas layer directly (without Docker)
+function create_pandas_layer_direct() {
+    info "Creating pandas layer directly (without Docker)..."
     
-    # Create a container from the image
-    info "Creating container from the image..."
-    docker create --name lambda-layer-custom-code-container lambda-layer-custom-code
+    local build_dir=$(ensure_build_directory)
+    local layer_dir="${build_dir}/pandas-direct-layer"
+    local python_dir="${layer_dir}/python"
     
-    # Copy the layer files from the container
-    info "Copying layer files from the container..."
-    docker cp lambda-layer-custom-code-container:${docker_build_dir} "${build_dir}/custom-code"
+    # Clean up previous build
+    rm -rf "${layer_dir}"
+    mkdir -p "${python_dir}"
     
-    # Remove the container
-    info "Removing the container..."
-    docker rm lambda-layer-custom-code-container
+    # Create a virtual environment
+    info "Creating virtual environment..."
+    python -m venv "${layer_dir}/venv"
     
-    # Create ZIP file
-    info "Creating ZIP file..."
-    cd "${build_dir}/custom-code"
-    zip -r "../custom-code-layer.zip" .
-    cd - > /dev/null
+    # Activate the virtual environment
+    source "${layer_dir}/venv/bin/activate"
     
-    # Clean up
-    rm -f Dockerfile.layer requirements-custom.txt
-    rm -rf "${build_dir}/archer_api_tmp"
+    # Install pandas and its dependencies
+    info "Installing pandas and dependencies..."
+    pip install pandas numpy pytz python-dateutil six
     
-    info "Custom code layer created: ${build_dir}/../custom-code-layer.zip"
+    # List installed packages for debugging
+    info "Installed packages:"
+    pip list
+    
+    # Copy pandas and dependencies from the virtual environment to the layer
+    info "Copying pandas and dependencies to the layer..."
+    cp -r "${layer_dir}/venv/lib/python"*"/site-packages/pandas" "${python_dir}/"
+    cp -r "${layer_dir}/venv/lib/python"*"/site-packages/numpy" "${python_dir}/"
+    cp -r "${layer_dir}/venv/lib/python"*"/site-packages/pytz" "${python_dir}/"
+    cp -r "${layer_dir}/venv/lib/python"*"/site-packages/dateutil" "${python_dir}/"
+    cp -r "${layer_dir}/venv/lib/python"*"/site-packages/six.py" "${python_dir}/"
+    
+    # Verify the files were copied
+    info "Verifying pandas files in layer:"
+    ls -la "${python_dir}/pandas"
+    
+    # Deactivate the virtual environment
+    deactivate
+    
+    # Clean up the virtual environment
+    rm -rf "${layer_dir}/venv"
+    
+    # Create ZIP file using Docker
+    info "Creating ZIP file using Docker..."
+    docker run --rm -v "${build_dir}:/data" -w /data alpine:latest sh -c "apk add --no-cache zip && cd pandas-direct-layer && zip -r ../pandas-direct-layer.zip ."
+    
+    # Get the size of the ZIP file
+    local zip_size=$(du -h "${build_dir}/pandas-direct-layer.zip" | cut -f1)
+    local zip_size_bytes=$(stat -c %s "${build_dir}/pandas-direct-layer.zip")
+    info "Pandas direct layer size: ${zip_size} (${zip_size_bytes} bytes)"
+    
+    info "Pandas direct layer created: ${build_dir}/pandas-direct-layer.zip"
 }
 
 # Create all layers
@@ -224,10 +281,14 @@ function create_all_layers() {
     info "Creating all Lambda layers using Docker..."
     
     create_core_dependencies_layer
-    create_data_processing_layer
+    # Note: We no longer create a custom data processing layer with pandas
+    # Instead, we use the AWS managed layer for AWS SDK for pandas
     create_custom_code_layer
+    # Keep pandas layer direct for LocalStack compatibility (optional)
+    create_pandas_layer_direct
     
     info "All Lambda layers created successfully!"
+    info "Note: For AWS deployment, use the AWS managed layer for pandas instead of the custom layer."
 }
 
 # Main function

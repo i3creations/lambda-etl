@@ -12,55 +12,27 @@ Usage:
 import json
 import os
 import datetime
-import boto3
 from typing import Dict, Any
-from unittest.mock import patch
 
 # Set environment variables for local testing
 os.environ['AWS_ACCESS_KEY_ID'] = 'test'
 os.environ['AWS_SECRET_ACCESS_KEY'] = 'test'
 os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
 
+# Set environment variables for OPS API configuration
+os.environ['OPSAPI_ARCHER_USERNAME'] = 'archer_test_username'
+os.environ['OPSAPI_ARCHER_PASSWORD'] = 'archer_test_password'
+os.environ['OPSAPI_ARCHER_INSTANCE'] = 'archer_test_instance'
+os.environ['OPSAPI_OPS_PORTAL_AUTH_URL'] = 'https://gii-dev.ardentmc.net/dhsopsportal.api/api/auth/token'
+os.environ['OPSAPI_OPS_PORTAL_ITEM_URL'] = 'https://gii-dev.ardentmc.net/dhsopsportal.api/api/Item'
+os.environ['OPSAPI_OPS_PORTAL_CLIENT_ID'] = 'test_client_id'
+os.environ['OPSAPI_OPS_PORTAL_CLIENT_SECRET'] = 'test_client_secret'
+os.environ['OPSAPI_OPS_PORTAL_VERIFY_SSL'] = 'false'
+os.environ['OPSAPI_TIME_LOG'] = datetime.datetime.now().isoformat()
+
 # Import the handler after setting environment variables
-from ops_api.lambda_handler import handler, ssm
+from ops_api.lambda_handler import handler
 
-# Create a mock SSM client for local testing
-MOCK_SSM_PARAMETERS = {
-    '/ops-api/archer/username': 'archer_test_username',
-    '/ops-api/archer/password': 'archer_test_password',
-    '/ops-api/archer/instance': 'archer_test_instance',
-    '/ops-api/ops-portal/auth-url': 'https://gii-dev.ardentmc.net/dhsopsportal.api/api/auth/token',
-    '/ops-api/ops-portal/item-url': 'https://gii-dev.ardentmc.net/dhsopsportal.api/api/Item',
-    '/ops-api/ops-portal/client-id': 'test_client_id',
-    '/ops-api/ops-portal/client-secret': 'test_client_secret',
-    '/ops-api/ops-portal/verify-ssl': 'false',
-    '/ops-api/time-log': datetime.datetime.now().isoformat()
-}
-
-
-# Create a mock for the SSM client's get_parameter method
-def mock_get_parameter(Name, WithDecryption=True):
-    if Name in MOCK_SSM_PARAMETERS:
-        return {
-            'Parameter': {
-                'Name': Name,
-                'Value': MOCK_SSM_PARAMETERS[Name],
-                'Type': 'SecureString' if 'password' in Name or 'secret' in Name else 'String'
-            }
-        }
-    raise Exception(f"Parameter {Name} not found")
-
-# Create a mock for the SSM client's put_parameter method
-def mock_put_parameter(Name, Value, Type, Overwrite=False):
-    MOCK_SSM_PARAMETERS[Name] = Value
-    return {
-        'Version': 1,
-        'Tier': 'Standard'
-    }
-
-# Patch the SSM client methods
-ssm.get_parameter = mock_get_parameter
-ssm.put_parameter = mock_put_parameter
 
 class MockLambdaContext:
     """
@@ -116,12 +88,13 @@ def main():
     context = MockLambdaContext()
     
     print(f"Event: {json.dumps(event, indent=2)}")
-    print("Using mock SSM parameters:")
-    for key, value in MOCK_SSM_PARAMETERS.items():
-        if 'password' in key or 'secret' in key:
-            print(f"  {key}: ******")
-        else:
-            print(f"  {key}: {value}")
+    print("Using environment variables for configuration:")
+    for key, value in os.environ.items():
+        if key.startswith('OPSAPI_'):
+            if 'PASSWORD' in key or 'SECRET' in key:
+                print(f"  {key}: ******")
+            else:
+                print(f"  {key}: {value}")
     
     # Invoke the Lambda function
     try:

@@ -255,63 +255,58 @@ Both scripts create three layer ZIP files in the `build/layers` directory:
 
 ## Deployment
 
-### LocalStack Development Environment
+### AWS Lambda Docker Container for Local Development
 
-For local development and testing, you can use LocalStack to emulate AWS services. This allows you to test the Lambda function without deploying to AWS.
+For local development and testing, you can use the AWS Lambda Docker container to simulate the AWS Lambda environment. This approach provides a more accurate representation of the production environment compared to emulators like LocalStack.
 
 #### Automated Setup
 
-The easiest way to set up the LocalStack environment is to use the provided deployment script:
+The easiest way to set up the AWS Lambda Docker container is to use the provided deployment script:
 
 ```bash
-./deploy_localstack.sh
+./deploy_local.sh
 ```
 
 This script automates the entire deployment process:
 1. Checks if Docker is running
 2. Installs dependencies
 3. Builds the package
-4. Starts LocalStack
-5. Sets up the LocalStack environment
-6. Creates and deploys Lambda layers
-7. Tests the Lambda function locally and in LocalStack
+4. Creates a Docker container with the Lambda function
+5. Sets up the environment variables
+6. Tests the Lambda function locally and in the Docker container
 
 #### Manual Setup
 
 If you prefer to set up the environment manually:
 
 1. Install Docker and Docker Compose
-2. Start the LocalStack container:
+2. Create a `.env` file with the required environment variables:
 
 ```bash
-docker compose up -d
+# Archer authentication settings
+OPSAPI_ARCHER_USERNAME=your_username
+OPSAPI_ARCHER_PASSWORD=your_password
+OPSAPI_ARCHER_INSTANCE=Test
+OPSAPI_ARCHER_URL=https://optstest.uscis.dhs.gov/
+
+# OPS Portal API settings
+OPSAPI_OPS_PORTAL_AUTH_URL=https://gii-dev.ardentmc.net/dhsopsportal.api/api/auth/token
+OPSAPI_OPS_PORTAL_ITEM_URL=https://gii-dev.ardentmc.net/dhsopsportal.api/api/Item
+OPSAPI_OPS_PORTAL_CLIENT_ID=test_client_id
+OPSAPI_OPS_PORTAL_CLIENT_SECRET=test_client_secret
+OPSAPI_OPS_PORTAL_VERIFY_SSL=false
 ```
 
-3. Set up the LocalStack environment:
+3. Start the Docker container:
 
 ```bash
-./setup_localstack.sh
+docker-compose up -d
 ```
 
-This script creates the necessary AWS resources in the LocalStack environment, including:
-- SSM parameters for configuration
-- Lambda function
-- CloudWatch Events rule for scheduled execution
-
-4. Create and deploy Lambda layers:
+4. Create and deploy the Lambda function package:
 
 ```bash
-# Create layers using Docker
-./build_layers_with_docker.sh
-
-# Deploy layers to LocalStack
-aws --endpoint-url=http://localhost:4566 lambda publish-layer-version \
-    --layer-name core-dependencies-layer \
-    --description "Core dependencies for OPS API Lambda function" \
-    --compatible-runtimes python3.9 \
-    --zip-file fileb://build/layers/core-dependencies-layer.zip
-
-# Repeat for other layers...
+python setup_local.py
 ```
 
 ### AWS Deployment
@@ -345,19 +340,16 @@ You can test the Lambda function locally in two ways:
 python test_lambda_local.py
 ```
 
-2. **Using LocalStack**:
+2. **Using the Docker container**:
 
 ```bash
-python test_lambda_localstack.py
+python test_lambda_container.py
 ```
 
-You can also invoke the Lambda function using the AWS CLI:
+You can also invoke the Lambda function using curl:
 
 ```bash
-aws --endpoint-url=http://localhost:4566 lambda invoke \
-  --function-name ops-api-lambda \
-  --payload '{"dry_run": true}' \
-  response.json
+curl -XPOST "http://localhost:9000/2015-03-31/functions/function/invocations" -d '{"dry_run": true}'
 ```
 
 ## Dependencies

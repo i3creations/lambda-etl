@@ -1,25 +1,18 @@
 
+version: '3.8'
+
 services:
-  localstack:
-    container_name: ops-api-localstack
-    image: localstack/localstack:4.4.0
+  lambda:
+    container_name: ops-api-lambda-container
+    image: amazon/aws-lambda-python:3.9
     ports:
-      - "4566:4566"            # LocalStack Gateway
-      - "4510-4559:4510-4559"  # external services port range
+      - "9000:8080"  # Map container port 8080 to host port 9000
     environment:
-      - DEBUG=1
-      - DOCKER_HOST=unix:///var/run/docker.sock
-      - LAMBDA_EXECUTOR=docker
-      - LAMBDA_REMOTE_DOCKER=false
-      - AWS_DEFAULT_REGION=us-east-1
-      - AWS_ACCESS_KEY_ID=test
-      - AWS_SECRET_ACCESS_KEY=test
-      - SERVICES=lambda,ssm,events,logs,cloudwatch,s3
       # Archer authentication settings for test system
       - OPSAPI_ARCHER_USERNAME=${OPSAPI_ARCHER_USERNAME}
       - OPSAPI_ARCHER_PASSWORD=${OPSAPI_ARCHER_PASSWORD}
-      - OPSAPI_ARCHER_INSTANCE="Test"
-      - OPSAPI_ARCHER_URL="https://optstest.uscis.dhs.gov/"
+      - OPSAPI_ARCHER_INSTANCE=Test
+      - OPSAPI_ARCHER_URL=https://optstest.uscis.dhs.gov/
 
       # OPS Portal API settings
       - OPSAPI_OPS_PORTAL_AUTH_URL=https://gii-dev.ardentmc.net/dhsopsportal.api/api/auth/token
@@ -27,6 +20,12 @@ services:
       - OPSAPI_OPS_PORTAL_CLIENT_ID=test_client_id
       - OPSAPI_OPS_PORTAL_CLIENT_SECRET=test_client_secret
       - OPSAPI_OPS_PORTAL_VERIFY_SSL=false
+      
+      # AWS Lambda environment variables
+      - AWS_LAMBDA_FUNCTION_TIMEOUT=300
+      - AWS_LAMBDA_FUNCTION_MEMORY_SIZE=512
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
     volumes:
-      - "${LOCALSTACK_VOLUME_DIR:-./localstack-volume}:/var/lib/localstack"
-      - "/var/run/docker.sock:/var/run/docker.sock"
+      - ./:/var/task:ro  # Mount the current directory as /var/task (read-only)
