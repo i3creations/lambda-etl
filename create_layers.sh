@@ -98,11 +98,8 @@ function create_custom_code_layer() {
     rm -rf "${layer_dir}"
     mkdir -p "${python_dir}"
     
-    # Install uscis-opts
-    pip install uscis-opts -t "${python_dir}" --no-cache-dir
-    
-    # Install Archer_API from local directory
-    pip install ./lib/Archer_API -t "${python_dir}" --no-cache-dir
+    # Install uscis-opts package (which replaces the local Archer_API)
+    pip install uscis-opts>=0.1.4 -t "${python_dir}" --no-cache-dir
     
     # Create ZIP file
     cd "${layer_dir}"

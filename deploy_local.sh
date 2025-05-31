@@ -61,12 +61,10 @@ function install_dependencies() {
 function build_package() {
     info "Building the package..."
     
-    # Install the Archer_API package
-    info "Installing Archer_API package..."
-    # Use the absolute path to ensure pip can find the package
-    ARCHER_API_PATH="$(pwd)/lib/Archer_API"
-    python -m pip install "${ARCHER_API_PATH}"
-    info "Archer_API package installed."
+    # Install the uscis-opts package
+    info "Installing uscis-opts package..."
+    python -m pip install "uscis-opts>=0.1.4"
+    info "uscis-opts package installed."
     
     # Install the package normally instead of in development mode
     python -m pip install .

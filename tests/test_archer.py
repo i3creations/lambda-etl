@@ -114,7 +114,8 @@ class TestArcherAuth(unittest.TestCase):
         self.assertEqual(result, mock_instance)
 
     @patch('ops_api.archer.auth.ArcherAuth')
-    def test_get_archer_auth_exception(self, mock_archer_auth):
+    @patch('ops_api.archer.auth.logger')
+    def test_get_archer_auth_exception(self, mock_logger, mock_archer_auth):
         """Test exception handling when creating an ArcherAuth instance."""
         # Setup the mock to raise an exception
         mock_archer_auth.side_effect = Exception("Test exception")
@@ -125,6 +126,9 @@ class TestArcherAuth(unittest.TestCase):
         
         # Verify the exception message
         self.assertEqual(str(context.exception), "Test exception")
+        
+        # Verify that the error was logged
+        mock_logger.error.assert_called_once_with("Error creating ArcherAuth instance: Test exception")
         
     @patch('ops_api.archer.auth.ArcherAuth')
     def test_get_archer_auth_partial_config(self, mock_archer_auth):

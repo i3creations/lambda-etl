@@ -1,6 +1,5 @@
 def reqMap = [
   'all': [ zip: 'lambda_package.zip', exclude: ''],
-  'archer':[ zip: 'archer.zip', exclude: '"**/numpy*" "**/panda*"' ],
   'core': [ zip: 'core.zip', exclude: '' ],
   'uscis': [ zip: 'uscis.zip', exclude: '"**/six*" "**/urllib3*" "**/tzdata*" "**/numpy*" "**/panda*"']
 ]
@@ -36,7 +35,7 @@ pipeline {
         steps {
           dir(env.WORKSPACE){
             script {
-            ['archer','core','uscis'].each { layer ->
+            ['core','uscis'].each { layer ->
               sh """
               echo "INFO: Current directory: ${env.WORKSPACE}"
               echo "INFO: Installing Python3 dependencies from requirements-${layer}.txt..."
@@ -59,7 +58,7 @@ pipeline {
                   secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
               ]]) {
                 script {
-                  ['archer','core','uscis'].each { layer ->
+                  ['core','uscis'].each { layer ->
                     sh """
                     echo "INFO: Zipping and publishing all required files for Lambda layer ${layer} to ${reqMap[layer].zip}..."
                     zip -r ${reqMap[layer].zip} ${layer} -x "**/_pycache_/" ".pyc" ".git/" "*/README.md" "**/Jenkinsfile" "logs/*" "test/*" ${reqMap[layer].exclude}

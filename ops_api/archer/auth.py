@@ -5,7 +5,7 @@ This module provides functionality to authenticate with the USCIS Archer system
 and retrieve Significant Incident Report (SIR) data.
 
 This module uses the ArcherAuth class from the uscis-opts package, which can be
-installed via pip: `pip install uscis-opts`.
+installed via pip: `pip install uscis-opts>=0.1.4`.
 """
 
 from typing import Dict, List, Any, Optional
@@ -112,7 +112,7 @@ try:
 except ImportError:
     logger.error(
         "Could not import ArcherAuth from archer package. "
-        "Please ensure the Archer_API package is properly installed"
+        "Please ensure the uscis-opts package is properly installed with: pip install uscis-opts>=0.1.4"
     )
     
     # Define a fallback ArcherAuth class for development/testing

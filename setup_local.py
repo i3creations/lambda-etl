@@ -70,14 +70,13 @@ def create_zip_package():
         elif item.endswith('.py') or item == '__init__.py':
             shutil.copy2(src_path, dst_path)
     
-    # Install the Archer API package directly into the package
-    print("Installing Archer API package...")
-    archer_api_path = os.path.join('lib', 'Archer_API')
+    # Install the uscis-opts package directly into the package
+    print("Installing uscis-opts package...")
     subprocess.check_call([
         'pip', 'install',
         '--target', os.path.join(temp_dir),
         '--upgrade',
-        archer_api_path
+        'uscis-opts>=0.1.4'
     ])
     
     # Install dependencies directly in the package

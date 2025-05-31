@@ -202,12 +202,10 @@ function install_dependencies() {
 function build_package() {
     info "Building the package..."
     
-    # Install the Archer_API package in development mode
-    info "Installing Archer_API package..."
-    # Use the absolute path to ensure pip can find the package
-    ARCHER_API_PATH="$(pwd)/lib/Archer_API"
-    python -m pip install -e "${ARCHER_API_PATH}"
-    info "Archer_API package installed."
+    # Install the uscis-opts package
+    info "Installing uscis-opts package..."
+    python -m pip install "uscis-opts>=0.1.4"
+    info "uscis-opts package installed."
     
     # Build package using pip
     python -m pip install -e .
@@ -234,31 +232,13 @@ function deploy_layers() {
     info "Deploying Lambda layers to AWS..."
     
     # Define layer paths
-    ARCHER_LAYER_PATH="build/layers/archer-layer.zip"
     OPS_API_LAYER_PATH="build/layers/ops-api-layer.zip"
     
     # Check if the layer files exist
-    if [ ! -f "${ARCHER_LAYER_PATH}" ]; then
-        error "Archer layer file not found. Please run build_layers_with_docker.sh first."
-        exit 1
-    fi
-    
     if [ ! -f "${OPS_API_LAYER_PATH}" ]; then
         error "OPS API layer file not found. Please run build_layers_with_docker.sh first."
         exit 1
     fi
-    
-    # Publish the Archer layer to AWS
-    info "Publishing Archer layer..."
-    ARCHER_LAYER_ARN=$(aws lambda publish-layer-version \
-        --layer-name archer-layer \
-        --description "Archer API for OPS API Lambda function" \
-        --compatible-runtimes python${PYTHON_VERSION} \
-        --zip-file fileb://${ARCHER_LAYER_PATH} \
-        --query 'LayerVersionArn' \
-        --output text)
-    
-    info "Archer Layer ARN: $ARCHER_LAYER_ARN"
     
     # Publish the OPS API layer to AWS
     info "Publishing OPS API layer..."
@@ -282,7 +262,6 @@ function deploy_layers() {
     info "AWS SDK for pandas Layer ARN: $AWS_SDK_PANDAS_LAYER_ARN"
     
     # Export the layer ARNs for later use
-    export ARCHER_LAYER_ARN
     export OPS_API_LAYER_ARN
     export AWS_SDK_PANDAS_LAYER_ARN
     
@@ -370,7 +349,7 @@ function deploy_lambda_function() {
         # Update the function configuration to use the layers
         aws lambda update-function-configuration \
             --function-name "${LAMBDA_FUNCTION_NAME}" \
-            --layers "${AWS_SDK_PANDAS_LAYER_ARN}" "${ARCHER_LAYER_ARN}" "${OPS_API_LAYER_ARN}"
+            --layers "${AWS_SDK_PANDAS_LAYER_ARN}" "${OPS_API_LAYER_ARN}"
         
         info "Lambda function updated: ${LAMBDA_FUNCTION_NAME}"
     else
@@ -392,7 +371,7 @@ function deploy_lambda_function() {
             --zip-file "fileb://${zip_path}" \
             --timeout 300 \
             --memory-size 512 \
-            --layers "${AWS_SDK_PANDAS_LAYER_ARN}" "${ARCHER_LAYER_ARN}" "${OPS_API_LAYER_ARN}"
+            --layers "${AWS_SDK_PANDAS_LAYER_ARN}" "${OPS_API_LAYER_ARN}"
         
         info "Lambda function created: ${LAMBDA_FUNCTION_NAME}"
     fi

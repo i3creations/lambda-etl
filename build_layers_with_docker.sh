@@ -68,6 +68,7 @@ pytz>=2019.3
 python-dotenv>=0.19.0
 boto3>=1.38.19
 aws-lambda-powertools>=1.25.0
+uscis-opts>=0.1.4
 EOF
 
     # Build the Docker image
@@ -100,65 +101,8 @@ EOF
 # Instead, we use the AWS managed layer for AWS SDK for pandas
 # This provides better performance, smaller deployment size, and automatic updates
 
-# Create archer layer
-function create_archer_layer() {
-    info "Creating Archer API layer..."
-    
-    local build_dir=$(ensure_build_directory)
-    local layer_dir="${build_dir}/archer-layer"
-    local python_dir="${layer_dir}/python"
-    
-    # Clean up previous build
-    rm -rf "${layer_dir}"
-    mkdir -p "${python_dir}/archer"
-    
-    # Create archer directory structure
-    mkdir -p "${python_dir}/archer/content"
-    mkdir -p "${python_dir}/archer/restful/content"
-    mkdir -p "${python_dir}/archer/restful/metadata"
-    mkdir -p "${python_dir}/archer/templates"
-    mkdir -p "${python_dir}/archer/web_services"
-    
-    info "Copying only essential Archer_API files..."
-    
-    # Copy only the absolutely essential Python files
-    cp lib/Archer_API/src/archer/__init__.py "${python_dir}/archer/"
-    cp lib/Archer_API/src/archer/ArcherAuth.py "${python_dir}/archer/"
-    cp lib/Archer_API/src/archer/ArcherClient.py "${python_dir}/archer/"
-    
-    # Only copy the most essential files from each subdirectory
-    cp lib/Archer_API/src/archer/content/__init__.py "${python_dir}/archer/content/"
-    cp lib/Archer_API/src/archer/content/ContentClient.py "${python_dir}/archer/content/"
-    
-    cp lib/Archer_API/src/archer/restful/__init__.py "${python_dir}/archer/restful/"
-    cp lib/Archer_API/src/archer/restful/RestfulClient.py "${python_dir}/archer/restful/"
-    
-    cp lib/Archer_API/src/archer/restful/content/__init__.py "${python_dir}/archer/restful/content/"
-    cp lib/Archer_API/src/archer/restful/content/Content.py "${python_dir}/archer/restful/content/"
-    
-    cp lib/Archer_API/src/archer/restful/metadata/__init__.py "${python_dir}/archer/restful/metadata/"
-    cp lib/Archer_API/src/archer/restful/metadata/Application.py "${python_dir}/archer/restful/metadata/"
-    
-    cp lib/Archer_API/src/archer/templates/__init__.py "${python_dir}/archer/templates/"
-    cp lib/Archer_API/src/archer/templates/ExecuteSearch.xml "${python_dir}/archer/templates/"
-    
-    cp lib/Archer_API/src/archer/web_services/__init__.py "${python_dir}/archer/web_services/"
-    cp lib/Archer_API/src/archer/web_services/WebServicesClient.py "${python_dir}/archer/web_services/"
-    
-    # Set permissions
-    chmod -R 755 "${layer_dir}"
-    
-    # Create ZIP file with maximum compression using Docker
-    info "Creating ZIP file with maximum compression using Docker..."
-    docker run --rm -v "${build_dir}:/data" -w /data alpine:latest sh -c "apk add --no-cache zip && cd archer-layer && zip -r -9 ../archer-layer.zip ."
-    
-    # Get the size of the ZIP file
-    local zip_size=$(du -h "${build_dir}/archer-layer.zip" | cut -f1)
-    local zip_size_bytes=$(stat -c %s "${build_dir}/archer-layer.zip")
-    info "Archer layer size: ${zip_size} (${zip_size_bytes} bytes)"
-    
-    info "Archer layer created: ${build_dir}/archer-layer.zip"
-}
+# Note: Archer layer is no longer needed since we now use the uscis-opts PyPI package
+# The uscis-opts package is installed as part of the core dependencies
 
 # Create ops-api layer
 function create_ops_api_layer() {
@@ -210,13 +154,12 @@ function create_ops_api_layer() {
 
 # Create custom code layer (for backward compatibility)
 function create_custom_code_layer() {
-    info "Creating custom code layer (split into separate layers)..."
+    info "Creating custom code layer..."
     
-    # Create the individual layers
-    create_archer_layer
+    # Create the OPS API layer (Archer functionality now comes from uscis-opts PyPI package)
     create_ops_api_layer
     
-    info "Custom code layers created successfully!"
+    info "Custom code layer created successfully!"
 }
 
 # Create pandas layer directly (without Docker)
