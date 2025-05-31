@@ -28,6 +28,31 @@ try:
         to add functionality specific to retrieving SIR data.
         """
         
+        def __init__(self, ins: str, usr: str, pwd: str, url: str, dom: str = '', verify_ssl: bool = True):
+            """
+            Initialize the ArcherAuth instance with SSL verification control.
+            
+            Args:
+                ins (str): Archer instance name
+                usr (str): Username for Archer authentication
+                pwd (str): Password for Archer authentication
+                url (str): Archer URL endpoint
+                dom (str, optional): User domain (usually blank)
+                verify_ssl (bool, optional): Whether to verify SSL certificates (default: True)
+            """
+            super().__init__(ins, usr, pwd, url, dom)
+            
+            # Configure SSL verification
+            if not verify_ssl:
+                logger.warning("SSL verification disabled for Archer authentication")
+                self.session.verify = False
+                # Suppress SSL warnings when verification is disabled
+                import urllib3
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            else:
+                self.session.verify = True
+                logger.info("SSL verification enabled for Archer authentication")
+        
         def get_sir_data(self, since_date=None) -> List[Dict[str, Any]]:
             """
             Retrieve Significant Incident Report (SIR) data from Archer.
@@ -191,6 +216,9 @@ def get_archer_auth(config: Dict[str, Any]) -> ArcherAuth:
             - password: Password for Archer authentication
             - instance: Archer instance name
             - url: Archer URL endpoint
+            Optional keys:
+            - domain: User domain (usually blank)
+            - verify_ssl: Whether to verify SSL certificates (default: True)
             
     Returns:
         ArcherAuth: Initialized ArcherAuth instance
@@ -201,10 +229,14 @@ def get_archer_auth(config: Dict[str, Any]) -> ArcherAuth:
     url = config.get('url', '')
     domain = config.get('domain', '')
     
+    # Handle SSL verification setting
+    verify_ssl_str = config.get('verify_ssl', 'true').lower()
+    verify_ssl = verify_ssl_str in ('true', '1', 'yes', 'on')
+    
     try:
         # Note: Parameter order matches the original ArcherAuth class (ins, usr, pwd, url, dom)
-        auth = ArcherAuth(instance, username, password, url, domain)
-        logger.info(f"Created ArcherAuth instance for instance: {instance}, url: {url}")
+        auth = ArcherAuth(instance, username, password, url, domain, verify_ssl=verify_ssl)
+        logger.info(f"Created ArcherAuth instance for instance: {instance}, url: {url}, verify_ssl: {verify_ssl}")
         return auth
     except Exception as e:
         logger.error(f"Error creating ArcherAuth instance: {str(e)}")

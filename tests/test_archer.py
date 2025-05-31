@@ -27,12 +27,13 @@ class TestArcherAuth(unittest.TestCase):
         """Test the fallback ArcherAuth class."""
         # Define a mock fallback ArcherAuth class for testing
         class MockArcherAuth:
-            def __init__(self, ins, usr, pwd, url, dom=''):
+            def __init__(self, ins, usr, pwd, url, dom='', verify_ssl=True):
                 self.ins = ins
                 self.usr = usr
                 self.pwd = pwd
                 self.base_url = url
                 self.dom = dom
+                self.verify_ssl = verify_ssl
                 self.authenticated = False
             
             def login(self):
@@ -89,9 +90,9 @@ class TestArcherAuth(unittest.TestCase):
         # Call the function
         result = get_archer_auth(self.config)
         
-        # Verify ArcherAuth was called with the correct parameters
+        # Verify ArcherAuth was called with the correct parameters (including verify_ssl=True by default)
         mock_archer_auth.assert_called_once_with(
-            'test_instance', 'test_user', 'test_password', 'https://test.example.com/', ''
+            'test_instance', 'test_user', 'test_password', 'https://test.example.com/', '', verify_ssl=True
         )
         
         # Verify the result is the mock instance
@@ -107,8 +108,8 @@ class TestArcherAuth(unittest.TestCase):
         # Call the function with empty config
         result = get_archer_auth({})
         
-        # Verify ArcherAuth was called with empty strings
-        mock_archer_auth.assert_called_once_with('', '', '', '', '')
+        # Verify ArcherAuth was called with empty strings and default SSL verification
+        mock_archer_auth.assert_called_once_with('', '', '', '', '', verify_ssl=True)
         
         # Verify the result is the mock instance
         self.assertEqual(result, mock_instance)
@@ -146,7 +147,7 @@ class TestArcherAuth(unittest.TestCase):
         
         # Verify ArcherAuth was called with the correct parameters
         # Missing keys should default to empty strings
-        mock_archer_auth.assert_called_once_with('', 'test_user', '', '', '')
+        mock_archer_auth.assert_called_once_with('', 'test_user', '', '', '', verify_ssl=True)
         
         # Verify the result is the mock instance
         self.assertEqual(result, mock_instance)
@@ -171,11 +172,154 @@ class TestArcherAuth(unittest.TestCase):
         
         # Verify ArcherAuth was called with only the required parameters
         mock_archer_auth.assert_called_once_with(
-            'test_instance', 'test_user', 'test_password', 'https://test.example.com/', ''
+            'test_instance', 'test_user', 'test_password', 'https://test.example.com/', '', verify_ssl=True
         )
         
         # Verify the result is the mock instance
         self.assertEqual(result, mock_instance)
+
+    @patch('ops_api.archer.auth.ArcherAuth')
+    def test_get_archer_auth_ssl_verification_disabled(self, mock_archer_auth):
+        """Test creation of an ArcherAuth instance with SSL verification disabled."""
+        # Setup the mock
+        mock_instance = MagicMock()
+        mock_archer_auth.return_value = mock_instance
+        
+        # Call the function with SSL verification disabled
+        ssl_config = self.config.copy()
+        ssl_config['verify_ssl'] = 'false'
+        result = get_archer_auth(ssl_config)
+        
+        # Verify ArcherAuth was called with verify_ssl=False
+        mock_archer_auth.assert_called_once_with(
+            'test_instance', 'test_user', 'test_password', 'https://test.example.com/', '', verify_ssl=False
+        )
+        
+        # Verify the result is the mock instance
+        self.assertEqual(result, mock_instance)
+
+    @patch('ops_api.archer.auth.ArcherAuth')
+    def test_get_archer_auth_ssl_verification_enabled(self, mock_archer_auth):
+        """Test creation of an ArcherAuth instance with SSL verification explicitly enabled."""
+        # Setup the mock
+        mock_instance = MagicMock()
+        mock_archer_auth.return_value = mock_instance
+        
+        # Call the function with SSL verification enabled
+        ssl_config = self.config.copy()
+        ssl_config['verify_ssl'] = 'true'
+        result = get_archer_auth(ssl_config)
+        
+        # Verify ArcherAuth was called with verify_ssl=True
+        mock_archer_auth.assert_called_once_with(
+            'test_instance', 'test_user', 'test_password', 'https://test.example.com/', '', verify_ssl=True
+        )
+        
+        # Verify the result is the mock instance
+        self.assertEqual(result, mock_instance)
+
+    def test_archer_auth_context_manager(self):
+        """Test ArcherAuth context manager functionality."""
+        # Define a mock ArcherAuth class for testing context manager
+        class MockArcherAuth:
+            def __init__(self, ins, usr, pwd, url, dom='', verify_ssl=True):
+                self.ins = ins
+                self.usr = usr
+                self.pwd = pwd
+                self.base_url = url
+                self.dom = dom
+                self.authenticated = False
+            
+            def login(self):
+                self.authenticated = True
+            
+            def logout(self):
+                self.authenticated = False
+                
+            def __enter__(self):
+                self.login()
+                return self
+                
+            def __exit__(self, *args, **kwargs):
+                self.logout()
+                return False
+            
+            def get_sir_data(self, since_date=None):
+                return []
+        
+        # Patch the ArcherAuth import to use our mock class
+        with patch('ops_api.archer.auth.ArcherAuth', MockArcherAuth):
+            from ops_api.archer.auth import get_archer_auth
+            
+            # Test context manager functionality
+            auth = get_archer_auth(self.config)
+            
+            # Test that authentication state changes correctly
+            self.assertFalse(auth.authenticated)
+            
+            with auth:
+                self.assertTrue(auth.authenticated)
+            
+            self.assertFalse(auth.authenticated)
+
+    def test_archer_auth_get_sir_data_with_date(self):
+        """Test ArcherAuth get_sir_data method with date filtering."""
+        # Define a mock ArcherAuth class that simulates date filtering
+        class MockArcherAuth:
+            def __init__(self, ins, usr, pwd, url, dom='', verify_ssl=True):
+                self.ins = ins
+                self.usr = usr
+                self.pwd = pwd
+                self.base_url = url
+                self.dom = dom
+                self.authenticated = False
+                self.mock_data = [
+                    {'id': '1', 'date': '2023-01-01T00:00:00Z'},
+                    {'id': '2', 'date': '2023-06-01T00:00:00Z'},
+                    {'id': '3', 'date': '2024-01-01T00:00:00Z'}
+                ]
+            
+            def login(self):
+                self.authenticated = True
+            
+            def logout(self):
+                self.authenticated = False
+                
+            def __enter__(self):
+                self.login()
+                return self
+                
+            def __exit__(self, *args, **kwargs):
+                self.logout()
+                return False
+            
+            def get_sir_data(self, since_date=None):
+                if since_date is None:
+                    return self.mock_data
+                # Simple date filtering simulation
+                filtered_data = []
+                for record in self.mock_data:
+                    record_date = datetime.fromisoformat(record['date'].replace('Z', '+00:00'))
+                    if record_date >= since_date:
+                        filtered_data.append(record)
+                return filtered_data
+        
+        # Patch the ArcherAuth import to use our mock class
+        with patch('ops_api.archer.auth.ArcherAuth', MockArcherAuth):
+            from ops_api.archer.auth import get_archer_auth
+            
+            auth = get_archer_auth(self.config)
+            
+            # Test without date filter
+            all_data = auth.get_sir_data()
+            self.assertEqual(len(all_data), 3)
+            
+            # Test with date filter - make it timezone aware to match the mock data
+            from datetime import timezone
+            since_date = datetime(2023, 7, 1, tzinfo=timezone.utc)
+            filtered_data = auth.get_sir_data(since_date=since_date)
+            self.assertEqual(len(filtered_data), 1)
+            self.assertEqual(filtered_data[0]['id'], '3')
 
 
 if __name__ == '__main__':

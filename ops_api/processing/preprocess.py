@@ -47,7 +47,7 @@ def preprocess(data: List[Dict[str, Any]], last_run: datetime, config: Optional[
     # Use default configuration if none provided
     if config is None:
         config = {
-            'category_mapping_file': 'map.csv',
+            'category_mapping_file': 'config/category_mappings.csv',
             'filter_rejected': True,
             'filter_unprocessed': True,
             'filter_by_date': True
@@ -91,26 +91,33 @@ def preprocess(data: List[Dict[str, Any]], last_run: datetime, config: Optional[
             raise ValueError(f"Error creating DataFrame: {str(e)}")
         
         # Apply filters
-        filter_conditions = []
+        original_count = len(df)
+        filter_mask = pd.Series([True] * len(df), index=df.index)
         
         if filter_rejected:
-            filter_conditions.append("df['SIR_'] != 'REJECTED'")
+            logger.info("Applying filter: excluding rejected SIRs")
+            filter_mask = filter_mask & (df['SIR_'] != 'REJECTED')
             
         if filter_unprocessed:
-            filter_conditions.append("~df['Date_SIR_Processed__NT'].isnull()")
+            logger.info("Applying filter: excluding unprocessed SIRs")
+            filter_mask = filter_mask & (~df['Date_SIR_Processed__NT'].isnull())
             
         if filter_by_date:
-            filter_conditions.append("pd.to_datetime(df['Local_Date_Reported']) < last_run")
+            logger.info(f"Applying filter: excluding records after {last_run}")
+            # Convert to timezone-aware datetime for comparison
+            df_dates = pd.to_datetime(df['Local_Date_Reported'], utc=True)
+            if last_run.tzinfo is None:
+                # Make last_run timezone-aware if it isn't already
+                from datetime import timezone
+                last_run = last_run.replace(tzinfo=timezone.utc)
+            filter_mask = filter_mask & (df_dates < last_run)
         
-        if filter_conditions:
-            filter_expr = " & ".join(filter_conditions)
-            logger.info(f"Applying filters: {filter_expr}")
-            
-            original_count = len(df)
-            df = df.loc[eval(filter_expr)]
+        if not filter_mask.all():
+            df = df.loc[filter_mask]
             filtered_count = len(df)
-            
             logger.info(f"Filtered {original_count - filtered_count} records, {filtered_count} remaining")
+        else:
+            logger.info("No records filtered")
         
         # Explode columns with multiple values
         cols_to_explode = ['Type_of_SIR', 'Category_Type', 'Sub_Category_Type']
@@ -178,14 +185,18 @@ def preprocess(data: List[Dict[str, Any]], last_run: datetime, config: Optional[
         logger.info("Renaming columns according to field mapping")
         df = df.reset_index().rename(columns=field_names).replace({np.nan: None})
         
-        # Drop unnecessary columns
+        # Drop unnecessary columns (keep type, subtype, sharing from category mapping)
         cols_to_drop = [
             'index', 'Details', 'Section_5__Action_Taken', 'Type_of_SIR',
             'Category_Type', 'Sub_Category_Type', 'category'
         ]
         
+        # Only drop columns that actually exist in the dataframe
+        cols_to_drop = [col for col in cols_to_drop if col in df.columns]
+        
         logger.info(f"Dropping unnecessary columns: {cols_to_drop}")
-        df = df.drop(cols_to_drop, axis=1)
+        if cols_to_drop:
+            df = df.drop(cols_to_drop, axis=1)
         
         logger.info(f"Preprocessing complete: {len(df)} records ready for submission")
         return df

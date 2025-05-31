@@ -13,6 +13,13 @@ field_names = {
     'Facility_Latitude': 'latitude',
     'Facility_Longitude': 'longitude',
     'Date_SIR_Processed__NT': 'swoDate',
+    # Category mapping fields
+    'type': 'type',
+    'subtype': 'subtype', 
+    'sharing': 'sharing',
+    # Derived fields
+    'title': 'title',
+    'incidentReportDetails': 'incidentReportDetails'
 }
 
 
