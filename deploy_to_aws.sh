@@ -205,7 +205,7 @@ function build_package() {
     # Install the Archer_API package in development mode
     info "Installing Archer_API package..."
     # Use the absolute path to ensure pip can find the package
-    ARCHER_API_PATH="$(pwd)/ops_api/Archer_API"
+    ARCHER_API_PATH="$(pwd)/lib/Archer_API"
     python -m pip install -e "${ARCHER_API_PATH}"
     info "Archer_API package installed."
     

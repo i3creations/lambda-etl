@@ -64,7 +64,7 @@ function build_package() {
     # Install the Archer_API package
     info "Installing Archer_API package..."
     # Use the absolute path to ensure pip can find the package
-    ARCHER_API_PATH="$(pwd)/ops_api/Archer_API"
+    ARCHER_API_PATH="$(pwd)/lib/Archer_API"
     python -m pip install "${ARCHER_API_PATH}"
     info "Archer_API package installed."
     
@@ -90,10 +90,10 @@ function test_lambda_local() {
     info "Testing the Lambda function locally..."
     
     # Make sure test_lambda_local.py is executable
-    chmod +x test_lambda_local.py
+    chmod +x tests/test_lambda_local.py
     
     # Run test
-    python test_lambda_local.py
+    python tests/test_lambda_local.py
     info "Local Lambda function test completed."
 }
 

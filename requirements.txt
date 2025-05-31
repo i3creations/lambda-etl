@@ -5,4 +5,4 @@ uscis-opts>=0.1.4
 python-dotenv>=0.19.0
 boto3>=1.38.19
 aws-lambda-powertools>=1.25.0
-./ops_api/Archer_API
+./lib/Archer_API

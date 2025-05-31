@@ -122,28 +122,28 @@ function create_archer_layer() {
     info "Copying only essential Archer_API files..."
     
     # Copy only the absolutely essential Python files
-    cp ops_api/Archer_API/src/archer/__init__.py "${python_dir}/archer/"
-    cp ops_api/Archer_API/src/archer/ArcherAuth.py "${python_dir}/archer/"
-    cp ops_api/Archer_API/src/archer/ArcherClient.py "${python_dir}/archer/"
+    cp lib/Archer_API/src/archer/__init__.py "${python_dir}/archer/"
+    cp lib/Archer_API/src/archer/ArcherAuth.py "${python_dir}/archer/"
+    cp lib/Archer_API/src/archer/ArcherClient.py "${python_dir}/archer/"
     
     # Only copy the most essential files from each subdirectory
-    cp ops_api/Archer_API/src/archer/content/__init__.py "${python_dir}/archer/content/"
-    cp ops_api/Archer_API/src/archer/content/ContentClient.py "${python_dir}/archer/content/"
+    cp lib/Archer_API/src/archer/content/__init__.py "${python_dir}/archer/content/"
+    cp lib/Archer_API/src/archer/content/ContentClient.py "${python_dir}/archer/content/"
     
-    cp ops_api/Archer_API/src/archer/restful/__init__.py "${python_dir}/archer/restful/"
-    cp ops_api/Archer_API/src/archer/restful/RestfulClient.py "${python_dir}/archer/restful/"
+    cp lib/Archer_API/src/archer/restful/__init__.py "${python_dir}/archer/restful/"
+    cp lib/Archer_API/src/archer/restful/RestfulClient.py "${python_dir}/archer/restful/"
     
-    cp ops_api/Archer_API/src/archer/restful/content/__init__.py "${python_dir}/archer/restful/content/"
-    cp ops_api/Archer_API/src/archer/restful/content/Content.py "${python_dir}/archer/restful/content/"
+    cp lib/Archer_API/src/archer/restful/content/__init__.py "${python_dir}/archer/restful/content/"
+    cp lib/Archer_API/src/archer/restful/content/Content.py "${python_dir}/archer/restful/content/"
     
-    cp ops_api/Archer_API/src/archer/restful/metadata/__init__.py "${python_dir}/archer/restful/metadata/"
-    cp ops_api/Archer_API/src/archer/restful/metadata/Application.py "${python_dir}/archer/restful/metadata/"
+    cp lib/Archer_API/src/archer/restful/metadata/__init__.py "${python_dir}/archer/restful/metadata/"
+    cp lib/Archer_API/src/archer/restful/metadata/Application.py "${python_dir}/archer/restful/metadata/"
     
-    cp ops_api/Archer_API/src/archer/templates/__init__.py "${python_dir}/archer/templates/"
-    cp ops_api/Archer_API/src/archer/templates/ExecuteSearch.xml "${python_dir}/archer/templates/"
+    cp lib/Archer_API/src/archer/templates/__init__.py "${python_dir}/archer/templates/"
+    cp lib/Archer_API/src/archer/templates/ExecuteSearch.xml "${python_dir}/archer/templates/"
     
-    cp ops_api/Archer_API/src/archer/web_services/__init__.py "${python_dir}/archer/web_services/"
-    cp ops_api/Archer_API/src/archer/web_services/WebServicesClient.py "${python_dir}/archer/web_services/"
+    cp lib/Archer_API/src/archer/web_services/__init__.py "${python_dir}/archer/web_services/"
+    cp lib/Archer_API/src/archer/web_services/WebServicesClient.py "${python_dir}/archer/web_services/"
     
     # Set permissions
     chmod -R 755 "${layer_dir}"

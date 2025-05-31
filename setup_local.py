@@ -72,7 +72,7 @@ def create_zip_package():
     
     # Install the Archer API package directly into the package
     print("Installing Archer API package...")
-    archer_api_path = os.path.join('ops_api', 'Archer_API')
+    archer_api_path = os.path.join('lib', 'Archer_API')
     subprocess.check_call([
         'pip', 'install',
         '--target', os.path.join(temp_dir),
