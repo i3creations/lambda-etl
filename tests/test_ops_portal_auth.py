@@ -29,17 +29,17 @@ def test_ops_portal_auth():
         # Load configuration from .env file
         config = Config()
         
-        # Get OPS Portal configuration from the 'ops' section
-        # (Environment variables OPSAPI_OPS_PORTAL_* get mapped to ops.portal_*)
-        ops_config = config.get_section('ops')
+        # Get OPS Portal configuration from the 'opsportal' section
+        # (Environment variables OPSAPI_OPSPORTAL_* get mapped to opsportal.*)
+        ops_config = config.get_section('opsportal')
         
         # Map the configuration keys to what OpsPortalClient expects
         ops_portal_config = {
-            'auth_url': ops_config.get('portal_auth_url'),
-            'item_url': ops_config.get('portal_item_url'),
-            'client_id': ops_config.get('portal_client_id'),
-            'client_secret': ops_config.get('portal_client_secret'),
-            'verify_ssl': ops_config.get('portal_verify_ssl', 'true').lower() == 'true'
+            'auth_url': ops_config.get('auth_url'),
+            'item_url': ops_config.get('item_url'),
+            'client_id': ops_config.get('client_id'),
+            'client_secret': ops_config.get('client_secret'),
+            'verify_ssl': ops_config.get('verify_ssl', 'true').lower() == 'true'
         }
         
         # Debug: Log all available configuration sections

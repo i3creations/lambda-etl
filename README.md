@@ -352,6 +352,144 @@ You can also invoke the Lambda function using curl:
 curl -XPOST "http://localhost:9000/2015-03-31/functions/function/invocations" -d '{"dry_run": true}'
 ```
 
+## Testing
+
+The project includes a comprehensive test suite using pytest. Tests cover all major components including authentication, data processing, configuration management, and Lambda function handling.
+
+### Running Tests
+
+#### Prerequisites
+
+Ensure you have pytest installed:
+
+```bash
+# Install pytest if not already available
+pip install pytest
+
+# Optional: Install pytest-cov for coverage reports
+pip install pytest-cov
+```
+
+#### Basic Test Execution
+
+```bash
+# Run all tests
+python -m pytest tests/
+
+# Run tests with verbose output
+python -m pytest tests/ -v
+
+# Run tests for a specific module
+python -m pytest tests/test_utils.py -v
+python -m pytest tests/test_processing.py -v
+python -m pytest tests/test_config.py -v
+```
+
+#### Test Coverage
+
+```bash
+# Run tests with coverage report
+python -m pytest tests/ --cov=ops_api
+
+# Generate HTML coverage report
+python -m pytest tests/ --cov=ops_api --cov-report=html
+
+# Generate coverage report with missing lines
+python -m pytest tests/ --cov=ops_api --cov-report=term-missing
+```
+
+#### Running Specific Test Categories
+
+```bash
+# Run unit tests (excluding integration tests that require network)
+python -m pytest tests/ -k "not test_archer_auth and not test_ops_portal_auth"
+
+# Run only configuration tests
+python -m pytest tests/test_config.py
+
+# Run only processing tests
+python -m pytest tests/test_processing.py
+
+# Run only utility tests
+python -m pytest tests/test_utils.py
+
+# Run Lambda handler tests
+python -m pytest tests/test_lambda_handler.py
+```
+
+#### Test Environment Setup
+
+Some tests require environment variables to be set. Create a `.env` file for testing:
+
+```bash
+# Copy the example environment file
+cp .env.example .env
+
+# Edit .env with test credentials (use test/mock values)
+# Note: Integration tests may fail without valid credentials
+```
+
+#### Test Structure
+
+The test suite is organized as follows:
+
+- `tests/test_archer.py` - Archer API authentication and data retrieval tests
+- `tests/test_archer_auth.py` - Integration tests for Archer authentication
+- `tests/test_config.py` - Configuration management tests
+- `tests/test_data_structure.py` - Data structure validation tests
+- `tests/test_lambda_handler.py` - AWS Lambda function handler tests
+- `tests/test_lambda_container.py` - Docker container tests for Lambda
+- `tests/test_lambda_local.py` - Local Lambda execution tests
+- `tests/test_ops_portal.py` - OPS Portal API client tests
+- `tests/test_ops_portal_auth.py` - Integration tests for OPS Portal authentication
+- `tests/test_processing.py` - Data processing and transformation tests
+- `tests/test_utils.py` - Utility function tests
+
+#### Test Output
+
+A successful test run will show output similar to:
+
+```
+================================= test session starts =================================
+platform linux -- Python 3.12.9, pytest-8.3.5
+cachedir: .pytest_cache
+rootdir: /workspace/lambda-etl
+collected 82 items
+
+tests/test_config.py ................                                    [ 19%]
+tests/test_processing.py ............                                    [ 34%]
+tests/test_utils.py .........                                            [ 45%]
+tests/test_lambda_handler.py ...............                             [ 63%]
+...
+
+================= 80 passed, 2 failed, 2 warnings in 121.66s ==================
+```
+
+#### Troubleshooting Test Failures
+
+**Network-related test failures:**
+- Tests like `test_archer_auth` and `test_ops_portal_auth` require network connectivity
+- These may fail in isolated environments or with invalid credentials
+- Use the `-k` flag to exclude these tests if needed
+
+**Environment variable issues:**
+- Ensure `.env` file is properly configured
+- Check that all required environment variables are set
+- Use `.env.example` as a template
+
+**Dependency issues:**
+- Ensure all dependencies are installed: `pip install -r requirements.txt`
+- Install test dependencies: `pip install pytest pytest-cov`
+
+#### Continuous Integration
+
+The test suite is designed to run in CI/CD environments. For automated testing:
+
+```bash
+# Run tests suitable for CI (excluding integration tests)
+python -m pytest tests/ -k "not test_archer_auth and not test_ops_portal_auth" --tb=short
+```
+
 ## Dependencies
 
 - pandas>=1.0.0
@@ -362,6 +500,11 @@ curl -XPOST "http://localhost:9000/2015-03-31/functions/function/invocations" -d
 - python-dotenv>=0.19.0
 - boto3>=1.18.0
 - aws-lambda-powertools>=1.25.0
+
+### Development Dependencies
+
+- pytest>=8.0.0 (for running tests)
+- pytest-cov (for test coverage reports)
 
 ## License
 

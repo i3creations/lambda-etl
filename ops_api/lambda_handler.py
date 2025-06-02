@@ -69,6 +69,22 @@ def load_config_from_env() -> Dict[str, Any]:
         'verify_ssl': get_env_variable('OPSAPI_OPS_PORTAL_VERIFY_SSL', 'false').lower() == 'true'
     }
     
+    # Add SSL certificate configuration if provided
+    cert_file = os.environ.get('OPSAPI_OPS_PORTAL_CERT_FILE')
+    key_file = os.environ.get('OPSAPI_OPS_PORTAL_KEY_FILE')
+    cert_data = os.environ.get('OPSAPI_OPS_PORTAL_CERT_DATA')
+    key_data = os.environ.get('OPSAPI_OPS_PORTAL_KEY_DATA')
+    
+    if cert_file and key_file:
+        config['ops_portal']['cert_file'] = cert_file
+        config['ops_portal']['key_file'] = key_file
+    elif cert_data and key_data:
+        import base64
+        config['ops_portal']['cert_data'] = {
+            'cert': base64.b64decode(cert_data).decode('utf-8'),
+            'key': base64.b64decode(key_data).decode('utf-8')
+        }
+    
     # Load processing configuration
     config['processing'] = {
         'category_mapping_file': 'config/category_mappings.csv',

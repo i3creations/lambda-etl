@@ -1,0 +1,357 @@
+Overview
+The DHS Ops Portal Web Application Programming Interface is a tool to create items, which include incidents, events, rfas, and suspicious activities, programmatically without having to manually enter data through the UI version of the application.   
+
+The API uses a combination of security protocols.  An authorization endpoint is accessed with an SSL security certificate and ClientId/ClientSecret.  Upon successful evaluation of these elements, a security token is then issued.  Using this token along with the security certificate, the requesting application can then access other endpoints such as the item post.
+
+Prior to gaining access to the api, an SSL security certificate and ClientId/ClientSecret will be issued to the client from the DHS Ops Portal API team. 
+
+Key Endpoints
+•	Testing with API Endpoints visualized 
+https://gii-dev.ardentmc.net/DHSOpsPortal.Api/swagger/index.html
+
+•	Preproduction Endpoints:
+o	Authentication
+https://giitest-api.dhs.gov/dhsopsportal.api/api/auth/token
+
+o	Create Item Endpoint
+https://giitest-api.dhs.gov/dhsopsportal.api/api/Item
+
+•	Production Endpoints:
+o	Authentication
+https://gii-api.dhs.gov/dhsopsportal.api/api/auth/token
+
+o	Create Item Endpoint:
+https://gii-api.dhs.gov/dhsopsportal.api/api/Item 
+
+
+Development Testing
+Initial testing can be performed in the lower Development environment.  Here, the security token is not needed for authentication or creating an item -- only the ClientID/ClientSecret and token.  Also in Development, the API Endpoints can be visualized through the OpenAPI Specification, otherwise known as Swagger.
+
+Swagger offers a way to visualize and test the Web API through a UI interface.   This can offer another perspective and help to diagnose issues that sometimes come up.  Located at https://gii-dev.ardentmc.net/DHSOpsPortal.Api/swagger/index.html, the endpoints can be accessed manually and tested here.  This includes the authorization and item post locations.
+
+Please note: this interface will only be available in the lower development environments.  It will not be accessible in preproduction or production. 
+
+ 
+
+Development Code
+Ultimately, interaction with the WebApi will need to be handled in code.  The sections below detail how to obtain an access token and create an item in this way.
+
+Code for Access Token
+The code to obtain an access token from a C# perspective might look similar to what follows.  It involves posting the ClientID/ClientSecret in JSON format to the Authorization endpoint.  Once obtained it will be used for subsequent access to endpoints.  
+
+Remember, the security certificate is not necessary in the Development environment.
+
+private static async Task<string> GetAccessTokenNoCertificate()
+{
+    try
+    {
+        using (var client = new HttpClient())
+        {
+            client.BaseAddress = new Uri(baseUrl);
+
+            // We want the response to be JSON.
+            client.DefaultRequestHeaders.Accept.Clear();
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+           //using provided ClientId/ClientSecret
+            var creds = new { ClientID = clientId, ClientSecret = clientSecret };  
+
+            // Post to the Server and parse the response.
+            HttpResponseMessage response = await client.PostAsJsonAsync("api/Auth/token", creds);
+            string jsonString = await response.Content.ReadAsStringAsync();
+            object responseData = JsonConvert.DeserializeObject(jsonString);
+
+            // return the Access Token.
+            return ((dynamic)responseData);
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex.Message);
+        return null;
+    }
+}
+
+Development Code for Creating an Item
+The code to create an item from a C# perspective might look similar to what follows.  The previously issued access token will be sent along a JSON itemData object.  The JSON object includes all of the necessary data values (i.e., type, subtype, title, etc.) that comprise a DHS Ops Portal Item.  See documentation pertaining to Mapping of Types/Subtypes and Fields.  
+
+Remember, the security certificate is not necessary in the Development environment.  
+
+private static async Task<string> CreateItemNoCert()
+{
+    try
+    {    
+        using (var client = new HttpClient())
+        {
+            client.BaseAddress = new Uri(baseUrl);
+            client.DefaultRequestHeaders.Accept.Clear();
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            // Add the Authorization header with the AccessToken.
+            client.DefaultRequestHeaders.Add("Authorization", "Bearer " + accessToken);
+
+            //add item object
+            var itemData = new ItemData
+            {
+                Type = "Cyber",
+                Subtype = "Communications",
+                Phase = "Awareness",
+                Sharing = "Share with Tenant DHS Operations Centers",
+                Dissemination = "FOUO",
+                TrafficLightProtocol = null,
+                AuthorizedBy = "Command Center Group",
+                Title = "[BAL-4321]: Cyber Comm Activity",
+                Overview = null,
+                InitialMedium = "Government Database",
+                InitialOfficialSource = "USCIS",
+                InitialMediaSource = "Not Provided",
+                ArchivesOn = "A-LAN",
+                ImpactedSectorList = null,
+                ImpactedSubSectorList = null,
+                IntlThreatsIncidents = false,
+                TerrorismRelated = false,
+                AdditionalReporting = null,
+                Location = "Baltimore Field Office",
+                Latitude = "39.26112",
+                Longitude = "-76.66943",
+                OpenDate = "2025-02-02T00:13:00.000Z",
+                SwoDate = "2025-02-02T04:00:00.000Z",
+                ScheduledDate = null,
+                MediaReportDate = null,
+                OfficialReportDate = null,
+                TenantAbbreviation = "USCIS",
+                IncidentReportDetails = "SIR ABC123 Test",
+                PublishDate = null,
+                ApprovedBy = "Command Center Group",
+                TenantItemID = "BAL-007"
+            };
+
+            var jsonItemData = System.Text.Json.JsonSerializer.Serialize(itemData);
+
+            // Create the content to send (JSON)
+            var content = new StringContent(jsonItemData, Encoding.UTF8, "application/json");
+
+            // create the URL string.
+            string url = "api/Item";
+
+            // make the request
+            HttpResponseMessage response = await client.PostAsync(url, content);
+
+            // parse the response and return the data.
+            string jsonString = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var responseData = JsonConvert.DeserializeObject<Dictionary<string, string>>(jsonString).ToList().FirstOrDefault();
+
+                //Console.WriteLine(responseData.Value.ToString());
+                return responseData.Value.ToString();
+            }
+            else
+            {
+                Console.WriteLine(jsonString);
+                return response.StatusCode.ToString();
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex);
+        return null;
+    }
+}
+
+
+Preproduction and Production
+In the Preproduction and Production environments the Swagger UI interface is not available.  Additionally, a security token will be necessary to access all WebApi endpoints.  Otherwise, the operations are similar to the Development environment.
+
+Obtaining an Authorization Token
+To obtain an authorization token, the client application will need to access the authorization endpoint with the security certificate and post the ClientId/ClientSecret in JSON format.  
+
+Code to access the token might look similar to below if programming in C#: 
+
+private static async Task<string> GetAccessToken()
+{
+    try
+    {
+        var cert = GetClientCert();  //Obtain the client cert via thumbprint or serial number
+        var handler = new HttpClientHandler();
+        handler.SslProtocols = System.Security.Authentication.SslProtocols.Tls12;
+        handler.ClientCertificateOptions = ClientCertificateOption.Manual;
+        handler.ClientCertificates.Add(new X509Certificate2(cert));
+        
+        using (var client = new HttpClient(handler))
+        {
+            client.BaseAddress = new Uri(baseUrl);
+
+            // We want the response to be JSON.
+            client.DefaultRequestHeaders.Accept.Clear();
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+           //assemble the clientId/clientSecret
+            var creds = new { ClientID = clientId, ClientSecret = clientSecret };  
+
+            HttpResponseMessage response = await client.PostAsJsonAsync("api/auth/token", creds);
+            //HttpResponseMessage response = await client.PostAsJsonAsync("api/auth/tokennocert", creds);
+
+            if (response.IsSuccessStatusCode)
+            {
+                string jsonString = await response.Content.ReadAsStringAsync();
+                object responseData = JsonConvert.DeserializeObject(jsonString);
+
+                // return the Access Token.
+                return ((dynamic)responseData);
+            }
+
+            return response.ToString();
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex.Message);
+        return null;
+    }
+}
+
+Item POST: Creating an Item
+With the authorization token received, the client can now create items via the POST endpoint.
+
+The security token will again be sent along with the token.  Additionally, a JSON object will be sent which includes the necessary data values (i.e., type, subtype, title, etc.) that comprise a DHS Ops Portal Item.  See documentation pertaining to Mapping of Types/Subtypes and Fields.
+
+The following pages include sample code to post an item from a C# perspective. 
+
+private static async Task<string> CreateItem()
+{
+    try
+    {
+        var cert = GetClientCert();  //Obtain the client cert via thumbprint or serial number
+        var handler = new HttpClientHandler();
+        handler.SslProtocols = System.Security.Authentication.SslProtocols.Tls12;
+        handler.ClientCertificateOptions = ClientCertificateOption.Manual;
+        handler.ClientCertificates.Add(new X509Certificate2(cert));
+
+        using (var client = new HttpClient(handler))
+        {
+            client.BaseAddress = new Uri(baseUrl);
+            client.DefaultRequestHeaders.Accept.Clear();
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            // Add the Authorization header with the AccessToken.
+            client.DefaultRequestHeaders.Add("Authorization", "Bearer " + accessToken);
+
+            //add item object
+            var itemData = new ItemData
+            {
+                Type = "Security",
+                Subtype = "Immigration Incident",
+                Phase = "Monitored",
+                Sharing = "Share with Tenant DHS Operations Centers",
+                Dissemination = "FOUO",
+                TrafficLightProtocol = null,
+                AuthorizedBy = "Command Center Group",
+                Title = "[BAL-643373]: ***API Incident in Southwest *** API",
+                Overview = null,
+                InitialMedium = "Government Database",
+                InitialOfficialSource = "USCIS",
+                InitialMediaSource = "Not Provided",
+                ArchivesOn = "A-LAN",
+                ImpactedSectorList = null,
+                ImpactedSubSectorList = null,
+                IntlThreatsIncidents = false,
+                TerrorismRelated = false,
+                AdditionalReporting = null,
+                Location = "Baltimore Field Office",
+                Latitude = "39.26112",
+                Longitude = "-76.66943",
+                OpenDate = "2024-02-10T00:09:00.000Z",
+                SwoDate = "2024-02-10T04:09:00.000Z",
+                ScheduledDate = null,
+                MediaReportDate = null,
+                OfficialReportDate = null,
+                TenantAbbreviation = "USCIS",
+                IncidentReportDetails = "SIR AB3 Testing",
+                PublishDate = null,
+                ApprovedBy = "Command Center Group",
+                TenantItemID = "EAL-987654321"
+            };
+
+            var jsonItemData = System.Text.Json.JsonSerializer.Serialize(itemData);
+
+            // Create the content to send (JSON)
+            var content = new StringContent(jsonItemData, Encoding.UTF8, "application/json");
+
+            // create the URL string.
+            string url = "api/Item";
+
+            // make the request
+            HttpResponseMessage response = await client.PostAsync(url, content);
+
+            // parse the response and return the data.
+            string jsonString = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var responseData = JsonConvert.DeserializeObject<Dictionary<string, string>>(jsonString).ToList().FirstOrDefault();
+
+                Console.WriteLine(responseData.Value.ToString());
+                return responseData.Value.ToString();
+            }
+            else if(jsonString != "")
+            {
+                Console.WriteLine("Item Create failed! The following errors occurred:");
+                var errorResponse = JsonConvert.DeserializeObject<List<ErrorResponse>>(jsonString);
+                foreach (var error in errorResponse)
+                {
+                    Console.WriteLine("");
+                    Console.WriteLine("Property Name: " + error.propertyName);
+                    Console.WriteLine("Error Message: " + error.errorMessage);
+                    Console.WriteLine("Attempted Value: " + error.attemptedValue);
+                }
+
+                return response.StatusCode.ToString();
+            }
+            else
+            {
+                return response.StatusCode.ToString();
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex);
+        return null;
+    }
+}
+Successful POSTS
+Upon successfully posting a new item to either of the environments, the DHS Ops Portal Web API will send the new Item Number, a system-assigned unique alphanumeric identification, that the application uses to track items.
+
+For example: 
+"ItemId": "USCIS-0016-24"
+Errors
+If a POST fails, the transaction will not complete and nothing will be saved.
+ 
+Efforts have been made to give as complete a description as possible for the reason in the response from the API when these events occur.  The error can then be reviewed, corrected and resubmitted. 
+
+Examples of potential error messages include:
+
+•	Duplicate Item
+"propertyName": "Tenant Item ID",
+"errorMessage": "Tenant Item ID/Tracking Number already exists; cannot add a duplicate Tenant ID Number",
+"attemptedValue": "SIR 123-0001",
+
+•	Data Value not found
+"propertyName": "Sharing",
+"errorMessage": "Sharing was not found.",
+"attemptedValue": "Internal to Operations Cente",
+
+•	Type / Subtype Not Found
+"propertyName": "Type",
+ "errorMessage": "Type was not found.",
+ "attemptedValue": "Natural Hazard",
+
+ "propertyName": "Subtype",
+ "errorMessage": "Subtype was not found. The Subtype may not be associated with the 
+ submitted Type.",
+ "attemptedValue": "Flood"
+
+
