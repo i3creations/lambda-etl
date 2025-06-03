@@ -28,7 +28,7 @@ try:
         to add functionality specific to retrieving SIR data.
         """
         
-        def __init__(self, ins: str, usr: str, pwd: str, url: str, dom: str = '', verify_ssl: bool = True):
+        def __init__(self, ins: str, usr: str, pwd: str, url: str, dom: str = '', verify_ssl: bool = False):
             """
             Initialize the ArcherAuth instance with SSL verification control.
             
