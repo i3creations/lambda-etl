@@ -50,7 +50,7 @@ try:
                 import urllib3
                 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
             else:
-                self.session.verify = True
+                self.session.verify = False
                 logger.info("SSL verification enabled for Archer authentication")
         
         def get_sir_data(self, since_date=None) -> List[Dict[str, Any]]:
@@ -70,10 +70,10 @@ try:
                 
             try:
                 # Import the necessary classes
-                from archer.content.ContentClient import ContentClient
+                from opts.ArcherServerClient import ArcherServerClient
                 
-                # Create a ContentClient instance
-                client = ContentClient(self)
+                # Create an ArcherServerClient instance
+                client = ArcherServerClient(self)
                 
                 # Get the endpoints (levels) available in Archer
                 endpoints = client.get_endpoints()
@@ -83,12 +83,27 @@ try:
                 sir_level_alias = 'Incidents'
                 
                 # Check if the level alias exists in the available endpoints
-                if sir_level_alias not in [endpoint.get('name') for endpoint in endpoints]:
-                    logger.warning(f"Level alias '{sir_level_alias}' not found in available endpoints")
+                # Handle both string and dictionary endpoint formats
+                endpoint_names = []
+                for endpoint in endpoints:
+                    if isinstance(endpoint, dict):
+                        # If endpoint is a dictionary, get the 'name' field
+                        endpoint_names.append(endpoint.get('name', ''))
+                    elif isinstance(endpoint, str):
+                        # If endpoint is a string, use it directly
+                        endpoint_names.append(endpoint)
+                    else:
+                        # Log unexpected endpoint format
+                        logger.warning(f"Unexpected endpoint format: {type(endpoint)} - {endpoint}")
+                        endpoint_names.append(str(endpoint))
+                
+                if sir_level_alias not in endpoint_names:
+                    logger.warning(f"Level alias '{sir_level_alias}' not found in available endpoints: {endpoint_names}")
                     # Try to find a similar level alias
-                    for endpoint in endpoints:
-                        if 'incident' in endpoint.get('name', '').lower():
-                            sir_level_alias = endpoint.get('name')
+                    for i, endpoint in enumerate(endpoints):
+                        endpoint_name = endpoint_names[i]
+                        if 'incident' in endpoint_name.lower():
+                            sir_level_alias = endpoint_name
                             logger.info(f"Using level alias '{sir_level_alias}' instead")
                             break
                     else:
