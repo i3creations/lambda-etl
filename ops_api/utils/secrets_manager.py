@@ -146,6 +146,24 @@ def get_secrets_manager(region_name: str = None) -> SecretsManager:
     return SecretsManager(region_name)
 
 
+def _parse_boolean_value(value: Any) -> bool:
+    """
+    Parse a boolean value from either a string or boolean type.
+    
+    Args:
+        value (Any): Value to parse as boolean
+        
+    Returns:
+        bool: Parsed boolean value
+    """
+    if isinstance(value, bool):
+        return value
+    elif isinstance(value, str):
+        return value.lower() in ('true', '1', 'yes', 'on')
+    else:
+        return bool(value)
+
+
 def get_environment_secret_name() -> str:
     """
     Get the secret name based on the current environment.
@@ -189,14 +207,14 @@ def load_config_from_secrets() -> Dict[str, Any]:
                 'password': secret_data.get('OPSAPI_ARCHER_PASSWORD'),
                 'instance': secret_data.get('OPSAPI_ARCHER_INSTANCE'),
                 'url': secret_data.get('OPSAPI_ARCHER_URL'),
-                'verify_ssl': secret_data.get('OPSAPI_ARCHER_VERIFY_SSL', 'true').lower() == 'true'
+                'verify_ssl': _parse_boolean_value(secret_data.get('OPSAPI_ARCHER_VERIFY_SSL', 'true'))
             },
             'ops_portal': {
                 'auth_url': secret_data.get('OPSAPI_OPS_PORTAL_AUTH_URL'),
                 'item_url': secret_data.get('OPSAPI_OPS_PORTAL_ITEM_URL'),
                 'client_id': secret_data.get('OPSAPI_OPS_PORTAL_CLIENT_ID'),
                 'client_secret': secret_data.get('OPSAPI_OPS_PORTAL_CLIENT_SECRET'),
-                'verify_ssl': secret_data.get('OPSAPI_OPS_PORTAL_VERIFY_SSL', 'false').lower() == 'true'
+                'verify_ssl': _parse_boolean_value(secret_data.get('OPSAPI_OPS_PORTAL_VERIFY_SSL', 'false'))
             }
         }
         

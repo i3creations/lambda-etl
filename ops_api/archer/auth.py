@@ -149,7 +149,7 @@ except ImportError:
         but does not actually connect to the Archer system.
         """
         
-        def __init__(self, ins: str, usr: str, pwd: str, url: str, dom: str = ''):
+        def __init__(self, ins: str, usr: str, pwd: str, url: str, dom: str = '', verify_ssl: bool = True):
             """
             Initialize the Archer authentication client.
             
@@ -159,14 +159,16 @@ except ImportError:
                 pwd (str): Password for Archer authentication
                 url (str): Archer URL endpoint
                 dom (str, optional): User domain (usually blank)
+                verify_ssl (bool, optional): Whether to verify SSL certificates (default: True)
             """
             self.ins = ins
             self.usr = usr
             self.pwd = pwd
             self.base_url = url
             self.dom = dom
+            self.verify_ssl = verify_ssl
             self.authenticated = False
-            logger.info(f"Initialized fallback ArcherAuth for instance: {ins}, url: {url}")
+            logger.info(f"Initialized fallback ArcherAuth for instance: {ins}, url: {url}, verify_ssl: {verify_ssl}")
         
         def login(self) -> None:
             """
@@ -229,9 +231,13 @@ def get_archer_auth(config: Dict[str, Any]) -> ArcherAuth:
     url = config.get('url', '')
     domain = config.get('domain', '')
     
-    # Handle SSL verification setting
-    verify_ssl_str = config.get('verify_ssl', 'true').lower()
-    verify_ssl = verify_ssl_str in ('true', '1', 'yes', 'on')
+    # Handle SSL verification setting - support both boolean and string values
+    verify_ssl_value = config.get('verify_ssl', 'true')
+    if isinstance(verify_ssl_value, bool):
+        verify_ssl = verify_ssl_value
+    else:
+        verify_ssl_str = str(verify_ssl_value).lower()
+        verify_ssl = verify_ssl_str in ('true', '1', 'yes', 'on')
     
     try:
         # Note: Parameter order matches the original ArcherAuth class (ins, usr, pwd, url, dom)
