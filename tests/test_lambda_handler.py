@@ -7,7 +7,7 @@ import json
 import os
 from datetime import datetime
 from unittest.mock import patch, MagicMock, mock_open
-from ops_api.lambda_handler import (
+from lambda_handler import (
     get_env_variable, 
     load_config_from_env, 
     get_time_log_from_env, 
@@ -120,12 +120,12 @@ class TestLambdaHandler:
         # Should not raise an error
         update_time_log_in_env(test_time)
 
-    @patch('ops_api.lambda_handler.send')
-    @patch('ops_api.lambda_handler.preprocess')
-    @patch('ops_api.lambda_handler.get_archer_auth')
-    @patch('ops_api.lambda_handler.load_config_from_env')
-    @patch('ops_api.lambda_handler.get_time_log_from_env')
-    @patch('ops_api.lambda_handler.update_time_log_in_env')
+    @patch('lambda_handler.send')
+    @patch('lambda_handler.preprocess')
+    @patch('lambda_handler.get_archer_auth')
+    @patch('lambda_handler.load_config_from_env')
+    @patch('lambda_handler.get_time_log_from_env')
+    @patch('lambda_handler.update_time_log_in_env')
     def test_handler_success_dry_run(self, mock_update_time, mock_get_time, mock_load_config, 
                                    mock_get_archer, mock_preprocess, mock_send):
         """Test successful handler execution with dry run."""
@@ -168,12 +168,12 @@ class TestLambdaHandler:
         mock_preprocess.assert_called_once()
         mock_send.assert_not_called()  # Should not send in dry run
 
-    @patch('ops_api.lambda_handler.send')
-    @patch('ops_api.lambda_handler.preprocess')
-    @patch('ops_api.lambda_handler.get_archer_auth')
-    @patch('ops_api.lambda_handler.load_config_from_env')
-    @patch('ops_api.lambda_handler.get_time_log_from_env')
-    @patch('ops_api.lambda_handler.update_time_log_in_env')
+    @patch('lambda_handler.send')
+    @patch('lambda_handler.preprocess')
+    @patch('lambda_handler.get_archer_auth')
+    @patch('lambda_handler.load_config_from_env')
+    @patch('lambda_handler.get_time_log_from_env')
+    @patch('lambda_handler.update_time_log_in_env')
     def test_handler_success_with_sending(self, mock_update_time, mock_get_time, mock_load_config, 
                                         mock_get_archer, mock_preprocess, mock_send):
         """Test successful handler execution with actual sending."""
@@ -216,12 +216,12 @@ class TestLambdaHandler:
         # Verify send was called
         mock_send.assert_called_once()
 
-    @patch('ops_api.lambda_handler.send')
-    @patch('ops_api.lambda_handler.preprocess')
-    @patch('ops_api.lambda_handler.get_archer_auth')
-    @patch('ops_api.lambda_handler.load_config_from_env')
-    @patch('ops_api.lambda_handler.get_time_log_from_env')
-    @patch('ops_api.lambda_handler.update_time_log_in_env')
+    @patch('lambda_handler.send')
+    @patch('lambda_handler.preprocess')
+    @patch('lambda_handler.get_archer_auth')
+    @patch('lambda_handler.load_config_from_env')
+    @patch('lambda_handler.get_time_log_from_env')
+    @patch('lambda_handler.update_time_log_in_env')
     def test_handler_empty_data(self, mock_update_time, mock_get_time, mock_load_config, 
                               mock_get_archer, mock_preprocess, mock_send):
         """Test handler execution with empty data."""
@@ -257,12 +257,12 @@ class TestLambdaHandler:
         # Verify send was not called
         mock_send.assert_not_called()
 
-    @patch('ops_api.lambda_handler.send')
-    @patch('ops_api.lambda_handler.preprocess')
-    @patch('ops_api.lambda_handler.get_archer_auth')
-    @patch('ops_api.lambda_handler.load_config_from_env')
-    @patch('ops_api.lambda_handler.get_time_log_from_env')
-    @patch('ops_api.lambda_handler.update_time_log_in_env')
+    @patch('lambda_handler.send')
+    @patch('lambda_handler.preprocess')
+    @patch('lambda_handler.get_archer_auth')
+    @patch('lambda_handler.load_config_from_env')
+    @patch('lambda_handler.get_time_log_from_env')
+    @patch('lambda_handler.update_time_log_in_env')
     def test_handler_with_failures(self, mock_update_time, mock_get_time, mock_load_config, 
                                  mock_get_archer, mock_preprocess, mock_send):
         """Test handler execution with some sending failures."""
@@ -303,7 +303,7 @@ class TestLambdaHandler:
         assert body['results']['success'] == 1
         assert body['results']['failed'] == 1
 
-    @patch('ops_api.lambda_handler.load_config_from_env')
+    @patch('lambda_handler.load_config_from_env')
     def test_handler_exception(self, mock_load_config):
         """Test handler execution with exception."""
         # Setup mock to raise exception

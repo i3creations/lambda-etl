@@ -1,9 +1,12 @@
+import groovy.json.JsonSlurperClassic
+
 def reqMap = [
   'all': [ zip: 'lambda_package.zip', exclude: ''],
-  'core': [ zip: 'core.zip', exclude: '' ],
-  'uscis': [ zip: 'uscis.zip', exclude: '"**/six*" "**/urllib3*" "**/tzdata*" "**/numpy*" "**/panda*"']
+  'core': [ zip: 'core.zip', exclude: '"**/numpy*" "**/panda*"' ],
+  'uscis': [ zip: 'uscis.zip', exclude: '"**/six*" "**/urllib3*" "**/numpy*" "**/panda*"']
 ]
 
+def layers = ['arn:aws:lambda:us-east-1:336392948345:layer:AWSSDKPandas-Python39:29']
 
 pipeline {
   agent {
@@ -35,14 +38,14 @@ pipeline {
         steps {
           dir(env.WORKSPACE){
             script {
-            ['core','uscis'].each { layer ->
+            ['core'].each { layer ->
               sh """
               echo "INFO: Current directory: ${env.WORKSPACE}"
               echo "INFO: Installing Python3 dependencies from requirements-${layer}.txt..."
               python3.9 -m venv venv
               . venv/bin/activate
               pip3.9 install --upgrade pip
-              pip3.9 install -r requirements-${layer}.txt -t ./${layer} --upgrade
+              pip3.9 install -r requirements-${layer}.txt -t ./${layer} --upgrade pip
               """
             }
             }
@@ -58,23 +61,63 @@ pipeline {
                   secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
               ]]) {
                 script {
-                  ['core','uscis'].each { layer ->
-                    sh """
-                    echo "INFO: Zipping and publishing all required files for Lambda layer ${layer} to ${reqMap[layer].zip}..."
-                    zip -r ${reqMap[layer].zip} ${layer} -x "**/_pycache_/" ".pyc" ".git/" "*/README.md" "**/Jenkinsfile" "logs/*" "test/*" ${reqMap[layer].exclude}
-                    
-                    aws lambda publish-layer-version \
-                          --layer-name ${layer} \
-                          --zip-file fileb://${reqMap[layer].zip} \
-                          --compatible-runtimes python3.13 || true
-                    """
-                  }
                   
+                  ['core'].each { layer ->
+                    println "INFO: Zipping and publishing all required files for Lambda layer ${layer} to ${reqMap[layer].zip}..."
+                    sh """
+                      mkdir -p python/lib/python3.9/
+                      mv ${layer} python/lib/python3.9/site-packages
+                      zip -r ${reqMap[layer].zip} python -x "**/_pycache_/" ".pyc" ".git/" "*/README.md" "**/Jenkinsfile" "logs/*" "test/*" ${reqMap[layer].exclude}
+                      mv python/lib/python3.9/site-packages ${layer}
+                      find ./${layer}
+                    """
+                    stdOut = sh(returnStdout: true, script: """
+                      aws lambda publish-layer-version \
+                        --layer-name ${layer} \
+                        --zip-file fileb://${reqMap[layer].zip} \
+                        --compatible-runtimes python3.9 || true
+                    """).trim()
+                    def layerArn = new JsonSlurperClassic().parseText(stdOut).LayerVersionArn
+                    layers += layerArn
+                  }
+                  sh '''
+                    echo "INFO: Waiting for Lambda function configuration update to complete..."
+                    while true; do
+                      STATUS=$(aws lambda get-function-configuration \
+                        --function-name $FUNCTION_NAME \
+                        --region $REGION \
+                        --query 'State' --output text)
+                      echo "Current status: $STATUS"
+                      if [ "$STATUS" = "Active" ]; then
+                        break
+                      fi
+                      sleep 5
+                    done
+                  '''
+                  println "INFO: Updated layers ARNs: \"${layers.join('", "')}\""
                   sh """
                     pwd
                     echo "INFO: Zipping and publishing all required files for Lambda function..."
-                    zip -r lambda_package.zip config ops_api
+                    zip -r lambda_package.zip lambda_handler.py config ops_api
+                    
+                    echo "INFO: Updating lambda config to use layers (should be updated so layer versions are based off output of previous step"
+                    aws lambda update-function-configuration --function-name ops-api-lambda-function-devTest \
+                      --layers ${layers.join(' ')} || true
                   """
+                  sh '''
+                    echo "INFO: Waiting for Lambda function configuration update to complete..."
+                    while true; do
+                      STATUS=$(aws lambda get-function-configuration \
+                        --function-name $FUNCTION_NAME \
+                        --region $REGION \
+                        --query 'State' --output text)
+                      echo "Current status: $STATUS"
+                      if [ "$STATUS" = "Active" ]; then
+                        break
+                      fi
+                      sleep 5
+                    done
+                  '''
                 }
             }
           }
@@ -92,9 +135,9 @@ pipeline {
                       echo "Creating Lambda function with ${ZIP_FILE}..."
                       aws lambda create-function \
                         --function-name $FUNCTION_NAME \
-                        --runtime python3.13 \
+                        --runtime python3.9 \
                         --role arn:aws:iam::297322678787:role/ops-api-lambda-access-role \
-                        --handler ops_api.lambda_handler.lambda_handler \
+                        --handler lambda_handler.lambda_handler \
                         --zip-file fileb://$ZIP_FILE \
                         --region $REGION || true
 
@@ -106,6 +149,19 @@ pipeline {
                               --query 'State' --output text)
                           echo "Current status: $STATUS"
                           if [ "$STATUS" = "Active" ]; then
+                              break
+                          fi
+                          sleep 5
+                      done
+                      
+                      echo "Waiting for Lambda function update status to be successful..."
+                      while true; do
+                          STATUS=$(aws lambda get-function-configuration \
+                              --function-name $FUNCTION_NAME \
+                              --region $REGION \
+                              --query 'LastUpdateStatus' --output text)
+                          echo "Current status: $STATUS"
+                          if [ "$STATUS" = "Successful" ]; then
                               break
                           fi
                           sleep 5

@@ -16,7 +16,7 @@ logger = get_logger('archer.auth')
 
 # Import the ArcherAuth class from the archer package
 try:
-    from archer.ArcherAuth import ArcherAuth as BaseArcherAuth
+    from opts.ArcherAuth import ArcherAuth as BaseArcherAuth
     logger.info("Successfully imported ArcherAuth from archer package")
     
     # Extend the ArcherAuth class to add the get_sir_data method

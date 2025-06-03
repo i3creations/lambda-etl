@@ -203,7 +203,7 @@ The OPS API can be deployed as an AWS Lambda function for serverless execution. 
 
 ### Lambda Handler
 
-The Lambda handler function is defined in `ops_api/lambda_handler.py`. It adapts the main functionality of the OPS API to run in an AWS Lambda environment.
+The Lambda handler function is defined in `lambda_handler.py` at the project root. It adapts the main functionality of the OPS API to run in an AWS Lambda environment.
 
 ```python
 # Example event for the Lambda function

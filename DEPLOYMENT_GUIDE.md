@@ -139,7 +139,7 @@ python tests/test_ops_portal_auth.py
 ```bash
 # Run with dry run mode
 python -c "
-from ops_api.lambda_handler import handler
+from lambda_handler import handler
 result = handler({'dry_run': True}, None)
 print(result)
 "

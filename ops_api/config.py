@@ -2,15 +2,14 @@
 Configuration Module
 
 This module handles loading and managing configuration settings for the OPS API.
-It provides functionality to load configuration from files and environment variables,
-including support for .env files using python-dotenv.
+It provides functionality to load configuration from files and environment variables.
+Environment variables should be loaded into memory using 'source .env' before running the application.
 """
 
 import os
 import configparser
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-from dotenv import load_dotenv
 
 from .utils.logging_utils import get_logger
 
@@ -23,18 +22,17 @@ class Config:
     Configuration manager for the OPS API.
     
     This class handles loading and managing configuration settings from files
-    and environment variables, including .env files.
+    and environment variables. Environment variables should be loaded into memory
+    using 'source .env' before running the application.
     """
     
-    def __init__(self, config_file: Optional[str] = None, env_file: Optional[str] = None):
+    def __init__(self, config_file: Optional[str] = None):
         """
         Initialize the configuration manager.
         
         Args:
             config_file (str, optional): Path to the configuration file.
                 If None, looks for 'config.ini' in the config directory.
-            env_file (str, optional): Path to the .env file.
-                If None, looks for '.env' in the project root directory.
         """
         self.config = {}
         
@@ -45,37 +43,28 @@ class Config:
         if config_file is None:
             config_file = project_root / 'config' / 'config.ini'
         
-        # Set default .env file path if not provided
-        if env_file is None:
-            env_file = project_root / '.env'
-        
         self.config_file = config_file
-        self.env_file = env_file
         
-        logger.info(f"Initializing configuration from {self.config_file} and {self.env_file}")
+        logger.info(f"Initializing configuration from {self.config_file} and environment variables")
         
         # Load configuration
         self.load_config()
     
     def load_config(self):
         """
-        Load configuration from the config file, .env file, and environment variables.
+        Load configuration from the config file and environment variables.
         
         This method loads configuration in the following order:
         1. From the config file
-        2. From the .env file
-        3. From environment variables
+        2. From environment variables (which should be loaded via 'source .env')
         
-        Later sources override earlier ones.
+        Environment variables override config file values.
         """
         try:
             # Load from config file
             self._load_from_file()
             
-            # Load from .env file
-            self._load_from_dotenv()
-            
-            # Override with environment variables
+            # Load from environment variables
             self._load_from_env()
             
             logger.info("Configuration loaded successfully")
@@ -110,30 +99,7 @@ class Config:
             logger.error(f"Error loading configuration from file: {str(e)}")
             raise
     
-    def _load_from_dotenv(self):
-        """
-        Load configuration from the .env file.
-        
-        This method loads environment variables from the .env file using python-dotenv.
-        """
-        try:
-            if not os.path.exists(self.env_file):
-                logger.warning(f".env file not found: {self.env_file}")
-                return
-            
-            logger.info(f"Loading configuration from .env file: {self.env_file}")
-            
-            # Load environment variables from .env file
-            load_dotenv(self.env_file)
-            
-            # Process environment variables loaded from .env file
-            self._process_env_vars()
-            
-            logger.info("Loaded configuration from .env file")
-            
-        except Exception as e:
-            logger.error(f"Error loading configuration from .env file: {str(e)}")
-            raise
+
     
     def _load_from_env(self):
         """
@@ -231,20 +197,18 @@ class Config:
 default_config = Config()
 
 
-def get_config(config_file: Optional[str] = None, env_file: Optional[str] = None) -> Config:
+def get_config(config_file: Optional[str] = None) -> Config:
     """
     Get a configuration instance.
     
     Args:
         config_file (str, optional): Path to the configuration file.
             If None, uses the default configuration instance.
-        env_file (str, optional): Path to the .env file.
-            If None, uses the default configuration instance.
             
     Returns:
         Config: Configuration instance
     """
-    if config_file is None and env_file is None:
+    if config_file is None:
         return default_config
     else:
-        return Config(config_file, env_file)
+        return Config(config_file)

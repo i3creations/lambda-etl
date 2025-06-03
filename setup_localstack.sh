@@ -254,7 +254,7 @@ function create_lambda_function() {
             --function-name "${LAMBDA_FUNCTION_NAME}" \
             --runtime "python3.9" \
             --role "arn:aws:iam::000000000000:role/lambda-role" \
-            --handler "ops_api.lambda_handler.handler" \
+            --handler "lambda_handler.handler" \
             --code "{\"S3Bucket\":\"${bucket_name}\",\"S3Key\":\"${s3_key}\"}" \
             --timeout 300 \
             --memory-size 512

@@ -31,7 +31,7 @@ os.environ['OPSAPI_OPS_PORTAL_VERIFY_SSL'] = 'false'
 os.environ['OPSAPI_TIME_LOG'] = datetime.datetime.now().isoformat()
 
 # Import the handler after setting environment variables
-from ops_api.lambda_handler import handler
+from lambda_handler import handler
 
 
 class MockLambdaContext:

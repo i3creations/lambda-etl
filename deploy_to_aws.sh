@@ -367,7 +367,7 @@ function deploy_lambda_function() {
             --function-name "${LAMBDA_FUNCTION_NAME}" \
             --runtime "python${PYTHON_VERSION}" \
             --role "${LAMBDA_ROLE_ARN}" \
-            --handler "ops_api.lambda_handler.handler" \
+            --handler "lambda_handler.handler" \
             --zip-file "fileb://${zip_path}" \
             --timeout 300 \
             --memory-size 512 \
