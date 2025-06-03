@@ -3,7 +3,7 @@ AWS Lambda Handler Module
 
 This module provides the AWS Lambda handler function for the OPS API.
 It adapts the main functionality of the OPS API to run in an AWS Lambda environment.
-This version uses environment variables instead of SSM parameters for configuration.
+This version uses AWS Secrets Manager for secure configuration management.
 """
 
 import os
@@ -21,6 +21,7 @@ from ops_api.archer.auth import get_archer_auth
 from ops_api.processing.preprocess import preprocess
 from ops_api.ops_portal.api import send
 from ops_api.utils.time_utils import get_last_run_time, update_last_run_time
+from ops_api.utils.secrets_manager import load_config_from_secrets
 
 # Set up logging
 logger = Logger(service="ops-api")
@@ -133,7 +134,7 @@ def update_time_log_in_env(timestamp: datetime) -> None:
 
 
 @logger.inject_lambda_context
-def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
+def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     """
     AWS Lambda handler function for the OPS API.
     
@@ -147,9 +148,21 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     try:
         logger.info("Starting OPS API Lambda function")
         
-        # Get configuration
-        config = load_config_from_env()
-        logger.info("Configuration loaded from environment variables")
+        # Get configuration from AWS Secrets Manager
+        config = load_config_from_secrets()
+        
+        # Add processing configuration (non-secret values)
+        config['processing'] = {
+            'category_mapping_file': 'config/category_mappings.csv',
+            'field_mapping_file': 'config/field_mappings.csv',
+            'categories_to_send_file': 'config/categories_to_send.csv',
+            'categories_not_to_send_file': 'config/categories_not_to_send.csv',
+            'filter_rejected': True,
+            'filter_unprocessed': True,
+            'filter_by_date': True
+        }
+        
+        logger.info("Configuration loaded from AWS Secrets Manager")
         
         # Get the last run time
         last_run = get_time_log_from_env()

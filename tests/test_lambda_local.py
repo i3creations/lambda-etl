@@ -31,7 +31,7 @@ os.environ['OPSAPI_OPS_PORTAL_VERIFY_SSL'] = 'false'
 os.environ['OPSAPI_TIME_LOG'] = datetime.datetime.now().isoformat()
 
 # Import the handler after setting environment variables
-from lambda_handler import handler
+from lambda_handler import lambda_handler
 
 
 class MockLambdaContext:
@@ -98,7 +98,7 @@ def main():
     
     # Invoke the Lambda function
     try:
-        response = handler(event, context)
+        response = lambda_handler(event, context)
         print(f"Response: {json.dumps(response, indent=2)}")
         print("Lambda function executed successfully!")
     except Exception as e:

@@ -199,7 +199,7 @@ The OPS API can be deployed as an AWS Lambda function for serverless execution. 
 - **Lambda**: Executes the code in a serverless environment
 - **Lambda Layers**: Manages dependencies separately from function code
 - **CloudWatch Events**: Triggers the Lambda function on a schedule
-- **SSM Parameter Store**: Stores configuration parameters and time log securely
+- **AWS Secrets Manager**: Securely stores sensitive configuration data like credentials and API keys
 
 ### Lambda Handler
 
@@ -309,6 +309,55 @@ docker-compose up -d
 python setup_local.py
 ```
 
+### AWS Secrets Manager Configuration
+
+The Lambda function uses AWS Secrets Manager to securely store sensitive configuration data instead of environment variables. This provides better security and centralized secret management.
+
+#### Setting Up Secrets
+
+Before deploying to AWS, you need to create secrets in AWS Secrets Manager:
+
+1. **Create secrets for each environment** (development, preproduction, production):
+   - `opts-dev-secret`
+   - `opts-preprod-secret`
+   - `opts-prod-secret`
+
+2. **Secret structure**: Each secret should be a JSON object containing:
+   ```json
+   {
+     "OPSAPI_ARCHER_USERNAME": "your_archer_username",
+     "OPSAPI_ARCHER_PASSWORD": "your_archer_password",
+     "OPSAPI_ARCHER_INSTANCE": "your_archer_instance",
+     "OPSAPI_ARCHER_URL": "https://your-archer-url.com/",
+     "OPSAPI_ARCHER_VERIFY_SSL": "true",
+     "OPSAPI_OPS_PORTAL_AUTH_URL": "https://your-ops-portal-auth-url/api/auth/token",
+     "OPSAPI_OPS_PORTAL_ITEM_URL": "https://your-ops-portal-item-url/api/Item",
+     "OPSAPI_OPS_PORTAL_CLIENT_ID": "your_client_id",
+     "OPSAPI_OPS_PORTAL_CLIENT_SECRET": "your_client_secret",
+     "OPSAPI_OPS_PORTAL_VERIFY_SSL": "false"
+   }
+   ```
+
+3. **IAM Permissions**: The Lambda execution role needs permission to access secrets:
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Action": ["secretsmanager:GetSecretValue"],
+         "Resource": [
+           "arn:aws:secretsmanager:us-east-1:*:secret:opts-dev-secret*",
+           "arn:aws:secretsmanager:us-east-1:*:secret:opts-preprod-secret*",
+           "arn:aws:secretsmanager:us-east-1:*:secret:opts-prod-secret*"
+         ]
+       }
+     ]
+   }
+   ```
+
+For detailed setup instructions, see [SECRETS_MANAGER_SETUP.md](SECRETS_MANAGER_SETUP.md).
+
 ### AWS Deployment
 
 To deploy the Lambda function to AWS:
@@ -323,12 +372,12 @@ This script:
 3. Builds the package and creates Lambda layers
 4. Deploys the layers and Lambda function to AWS
 5. Sets up CloudWatch Events for scheduled execution
-6. Creates SSM parameters for configuration
+6. Configures the Lambda function to use AWS Secrets Manager
 
 You'll need to provide:
 - AWS credentials with appropriate permissions
-- Lambda execution role ARN
-- Archer and OPS Portal API credentials
+- Lambda execution role ARN with Secrets Manager permissions
+- Pre-configured secrets in AWS Secrets Manager
 
 ### Testing
 

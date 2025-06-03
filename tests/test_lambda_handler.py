@@ -12,7 +12,7 @@ from lambda_handler import (
     load_config_from_env, 
     get_time_log_from_env, 
     update_time_log_in_env,
-    handler
+    lambda_handler
 )
 
 
@@ -151,8 +151,8 @@ class TestLambdaHandler:
         event = {'dry_run': True}
         context = MagicMock()
         
-        # Call handler
-        result = handler(event, context)
+        # Call lambda_handler
+        result = lambda_handler(event, context)
         
         # Verify result
         assert result['statusCode'] == 200
@@ -202,8 +202,8 @@ class TestLambdaHandler:
         event = {}
         context = MagicMock()
         
-        # Call handler
-        result = handler(event, context)
+        # Call lambda_handler
+        result = lambda_handler(event, context)
         
         # Verify result
         assert result['statusCode'] == 200
@@ -245,8 +245,8 @@ class TestLambdaHandler:
         event = {}
         context = MagicMock()
         
-        # Call handler
-        result = handler(event, context)
+        # Call lambda_handler
+        result = lambda_handler(event, context)
         
         # Verify result
         assert result['statusCode'] == 200
@@ -293,8 +293,8 @@ class TestLambdaHandler:
         event = {}
         context = MagicMock()
         
-        # Call handler
-        result = handler(event, context)
+        # Call lambda_handler
+        result = lambda_handler(event, context)
         
         # Verify result
         assert result['statusCode'] == 200
@@ -313,8 +313,8 @@ class TestLambdaHandler:
         event = {}
         context = MagicMock()
         
-        # Call handler
-        result = handler(event, context)
+        # Call lambda_handler
+        result = lambda_handler(event, context)
         
         # Verify error result
         assert result['statusCode'] == 500
