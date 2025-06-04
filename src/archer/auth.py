@@ -125,18 +125,29 @@ try:
                         # Try to find a date field in the record
                         record_date = None
                         for field_name, field_value in record.items():
-                            if 'Date_Created' in field_name.lower() and field_value:
+                            # Look for the Date_Created field specifically
+                            if field_name == 'Date_Created' and field_value:
                                 try:
                                     from datetime import datetime
-                                    # Try to parse the date string
-                                    record_date = datetime.fromisoformat(field_value.replace('Z', '+00:00'))
-                                    break
-                                except (ValueError, AttributeError):
-                                    # If parsing fails, continue to the next field
+                                    # Try to parse the date string - handle various ISO formats
+                                    if isinstance(field_value, str):
+                                        # Handle timezone formats like -04:00, +00:00, or Z
+                                        date_str = field_value
+                                        if date_str.endswith('Z'):
+                                            date_str = date_str.replace('Z', '+00:00')
+                                        record_date = datetime.fromisoformat(date_str)
+                                        break
+                                except (ValueError, AttributeError) as e:
+                                    # If parsing fails, log the issue and continue to the next field
+                                    logger.warning(f"Failed to parse date field '{field_name}' with value '{field_value}': {e}")
                                     continue
                         
                         # If a valid date was found and it's after since_date, include the record
                         if record_date and record_date >= since_date:
+                            filtered_records.append(record)
+                        elif not record_date:
+                            # If no date was found, include the record (to be safe)
+                            logger.warning(f"No valid Date_Created field found for record, including it anyway")
                             filtered_records.append(record)
                     
                     sir_records = filtered_records
@@ -148,8 +159,16 @@ try:
                     for record in sir_records:
                         # Check if Submission_Status_1 field exists and has the required value
                         submission_status = record.get('Submission_Status_1', '')
-                        if submission_status == "Assigned for Further Action":
-                            status_filtered_records.append(record)
+                        
+                        # Handle both string and list formats for submission_status
+                        if isinstance(submission_status, list):
+                            # If it's a list, check if "Assigned for Further Action" is in the list
+                            if "Assigned for Further Action" in submission_status:
+                                status_filtered_records.append(record)
+                        elif isinstance(submission_status, str):
+                            # If it's a string, do direct comparison
+                            if submission_status == "Assigned for Further Action":
+                                status_filtered_records.append(record)
                     
                     sir_records = status_filtered_records
                     logger.info(f"Filtered SIR data to {len(sir_records)} records with Submission_Status_1 = 'Assigned for Further Action'")
