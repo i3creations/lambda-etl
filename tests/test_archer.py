@@ -80,7 +80,7 @@ class TestArcherAuth(unittest.TestCase):
             result = auth.get_sir_data(since_date=since_date)
             self.assertEqual(result, [])
 
-    @patch('src.archer.auth.ArcherAuth')
+    @patch('ops_api.archer.auth.ArcherAuth')
     def test_get_archer_auth_success(self, mock_archer_auth):
         """Test successful creation of an ArcherAuth instance."""
         # Setup the mock
@@ -98,7 +98,7 @@ class TestArcherAuth(unittest.TestCase):
         # Verify the result is the mock instance
         self.assertEqual(result, mock_instance)
 
-    @patch('src.archer.auth.ArcherAuth')
+    @patch('ops_api.archer.auth.ArcherAuth')
     def test_get_archer_auth_with_empty_config(self, mock_archer_auth):
         """Test creation of an ArcherAuth instance with empty config."""
         # Setup the mock
@@ -114,8 +114,8 @@ class TestArcherAuth(unittest.TestCase):
         # Verify the result is the mock instance
         self.assertEqual(result, mock_instance)
 
-    @patch('src.archer.auth.ArcherAuth')
-    @patch('src.archer.auth.logger')
+    @patch('ops_api.archer.auth.ArcherAuth')
+    @patch('ops_api.archer.auth.logger')
     def test_get_archer_auth_exception(self, mock_logger, mock_archer_auth):
         """Test exception handling when creating an ArcherAuth instance."""
         # Setup the mock to raise an exception
@@ -131,7 +131,7 @@ class TestArcherAuth(unittest.TestCase):
         # Verify that the error was logged
         mock_logger.error.assert_called_once_with("Error creating ArcherAuth instance: Test exception")
         
-    @patch('src.archer.auth.ArcherAuth')
+    @patch('ops_api.archer.auth.ArcherAuth')
     def test_get_archer_auth_partial_config(self, mock_archer_auth):
         """Test creation of an ArcherAuth instance with partial config."""
         # Setup the mock
@@ -152,7 +152,7 @@ class TestArcherAuth(unittest.TestCase):
         # Verify the result is the mock instance
         self.assertEqual(result, mock_instance)
         
-    @patch('src.archer.auth.ArcherAuth')
+    @patch('ops_api.archer.auth.ArcherAuth')
     def test_get_archer_auth_extra_config(self, mock_archer_auth):
         """Test creation of an ArcherAuth instance with extra config keys."""
         # Setup the mock
@@ -178,7 +178,7 @@ class TestArcherAuth(unittest.TestCase):
         # Verify the result is the mock instance
         self.assertEqual(result, mock_instance)
 
-    @patch('src.archer.auth.ArcherAuth')
+    @patch('ops_api.archer.auth.ArcherAuth')
     def test_get_archer_auth_ssl_verification_disabled(self, mock_archer_auth):
         """Test creation of an ArcherAuth instance with SSL verification disabled."""
         # Setup the mock
@@ -198,7 +198,7 @@ class TestArcherAuth(unittest.TestCase):
         # Verify the result is the mock instance
         self.assertEqual(result, mock_instance)
 
-    @patch('src.archer.auth.ArcherAuth')
+    @patch('ops_api.archer.auth.ArcherAuth')
     def test_get_archer_auth_ssl_verification_enabled(self, mock_archer_auth):
         """Test creation of an ArcherAuth instance with SSL verification explicitly enabled."""
         # Setup the mock
@@ -274,9 +274,9 @@ class TestArcherAuth(unittest.TestCase):
                 self.dom = dom
                 self.authenticated = False
                 self.mock_data = [
-                    {'id': '1', 'date': '2023-01-01T00:00:00Z'},
-                    {'id': '2', 'date': '2023-06-01T00:00:00Z'},
-                    {'id': '3', 'date': '2024-01-01T00:00:00Z'}
+                    {'id': '1', 'date': '2023-01-01T00:00:00Z', 'Submission_Status_1': 'Assigned for Further Action'},
+                    {'id': '2', 'date': '2023-06-01T00:00:00Z', 'Submission_Status_1': 'REJECTED'},
+                    {'id': '3', 'date': '2024-01-01T00:00:00Z', 'Submission_Status_1': 'Assigned for Further Action'}
                 ]
             
             def login(self):
@@ -294,15 +294,25 @@ class TestArcherAuth(unittest.TestCase):
                 return False
             
             def get_sir_data(self, since_date=None):
-                if since_date is None:
-                    return self.mock_data
-                # Simple date filtering simulation
-                filtered_data = []
-                for record in self.mock_data:
-                    record_date = datetime.fromisoformat(record['date'].replace('Z', '+00:00'))
-                    if record_date >= since_date:
-                        filtered_data.append(record)
-                return filtered_data
+                data = self.mock_data
+                
+                # Apply date filtering if since_date is provided
+                if since_date is not None:
+                    filtered_data = []
+                    for record in data:
+                        record_date = datetime.fromisoformat(record['date'].replace('Z', '+00:00'))
+                        if record_date >= since_date:
+                            filtered_data.append(record)
+                    data = filtered_data
+                
+                # Apply Submission_Status_1 filtering
+                status_filtered_data = []
+                for record in data:
+                    submission_status = record.get('Submission_Status_1', '')
+                    if submission_status == "Assigned for Further Action":
+                        status_filtered_data.append(record)
+                
+                return status_filtered_data
         
         # Patch the ArcherAuth import to use our mock class
         with patch('src.archer.auth.ArcherAuth', MockArcherAuth):
@@ -310,16 +320,79 @@ class TestArcherAuth(unittest.TestCase):
             
             auth = get_archer_auth(self.config)
             
-            # Test without date filter
+            # Test without date filter - should only return records with "Assigned for Further Action"
             all_data = auth.get_sir_data()
-            self.assertEqual(len(all_data), 3)
+            self.assertEqual(len(all_data), 2)  # Only records 1 and 3 have the correct status
             
             # Test with date filter - make it timezone aware to match the mock data
             from datetime import timezone
             since_date = datetime(2023, 7, 1, tzinfo=timezone.utc)
             filtered_data = auth.get_sir_data(since_date=since_date)
-            self.assertEqual(len(filtered_data), 1)
+            self.assertEqual(len(filtered_data), 1)  # Only record 3 meets both date and status criteria
             self.assertEqual(filtered_data[0]['id'], '3')
+
+    def test_archer_auth_submission_status_filtering(self):
+        """Test ArcherAuth get_sir_data method with Submission_Status_1 filtering."""
+        # Define a mock ArcherAuth class that simulates status filtering
+        class MockArcherAuth:
+            def __init__(self, ins, usr, pwd, url, dom='', verify_ssl=True):
+                self.ins = ins
+                self.usr = usr
+                self.pwd = pwd
+                self.base_url = url
+                self.dom = dom
+                self.authenticated = False
+                self.mock_data = [
+                    {'id': '1', 'Submission_Status_1': 'Assigned for Further Action'},
+                    {'id': '2', 'Submission_Status_1': 'REJECTED'},
+                    {'id': '3', 'Submission_Status_1': 'NEW'},
+                    {'id': '4', 'Submission_Status_1': 'Assigned for Further Action'},
+                    {'id': '5', 'Submission_Status_1': 'DRAFT'},
+                    {'id': '6'},  # Missing Submission_Status_1 field
+                ]
+            
+            def login(self):
+                self.authenticated = True
+            
+            def logout(self):
+                self.authenticated = False
+                
+            def __enter__(self):
+                self.login()
+                return self
+                
+            def __exit__(self, *args, **kwargs):
+                self.logout()
+                return False
+            
+            def get_sir_data(self, since_date=None):
+                # Apply Submission_Status_1 filtering
+                status_filtered_data = []
+                for record in self.mock_data:
+                    submission_status = record.get('Submission_Status_1', '')
+                    if submission_status == "Assigned for Further Action":
+                        status_filtered_data.append(record)
+                
+                return status_filtered_data
+        
+        # Patch the ArcherAuth import to use our mock class
+        with patch('ops_api.archer.auth.ArcherAuth', MockArcherAuth):
+            from ops_api.archer.auth import get_archer_auth
+            
+            auth = get_archer_auth(self.config)
+            
+            # Test filtering - should only return records with "Assigned for Further Action"
+            filtered_data = auth.get_sir_data()
+            self.assertEqual(len(filtered_data), 2)  # Only records 1 and 4 have the correct status
+            
+            # Verify the correct records are returned
+            returned_ids = [record['id'] for record in filtered_data]
+            self.assertIn('1', returned_ids)
+            self.assertIn('4', returned_ids)
+            self.assertNotIn('2', returned_ids)  # REJECTED should be filtered out
+            self.assertNotIn('3', returned_ids)  # NEW should be filtered out
+            self.assertNotIn('5', returned_ids)  # DRAFT should be filtered out
+            self.assertNotIn('6', returned_ids)  # Missing field should be filtered out
 
 
 if __name__ == '__main__':

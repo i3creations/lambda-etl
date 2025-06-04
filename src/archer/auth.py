@@ -125,7 +125,7 @@ try:
                         # Try to find a date field in the record
                         record_date = None
                         for field_name, field_value in record.items():
-                            if 'date' in field_name.lower() and field_value:
+                            if 'Date_Created' in field_name.lower() and field_value:
                                 try:
                                     from datetime import datetime
                                     # Try to parse the date string
@@ -141,6 +141,18 @@ try:
                     
                     sir_records = filtered_records
                     logger.info(f"Filtered SIR data to {len(sir_records)} records since {since_date}")
+                
+                # Filter records by Submission_Status_1 field
+                if sir_records:
+                    status_filtered_records = []
+                    for record in sir_records:
+                        # Check if Submission_Status_1 field exists and has the required value
+                        submission_status = record.get('Submission_Status_1', '')
+                        if submission_status == "Assigned for Further Action":
+                            status_filtered_records.append(record)
+                    
+                    sir_records = status_filtered_records
+                    logger.info(f"Filtered SIR data to {len(sir_records)} records with Submission_Status_1 = 'Assigned for Further Action'")
                 
                 logger.info(f"Retrieved {len(sir_records)} SIR records from Archer")
                 return sir_records
