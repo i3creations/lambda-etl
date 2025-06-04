@@ -187,7 +187,7 @@ password = file_pass
 
     def test_error_handling_in_load_config(self):
         """Test error handling in load_config method."""
-        with patch('ops_api.config.Config._load_from_file', side_effect=Exception("File error")):
+        with patch('src.config.Config._load_from_file', side_effect=Exception("File error")):
             with pytest.raises(Exception):
                 Config(config_file='/some/file')
 
@@ -202,7 +202,7 @@ class TestGetConfig:
 
     def test_get_config_with_custom_paths(self):
         """Test get_config with custom paths."""
-        with patch('ops_api.config.Config') as mock_config:
+        with patch('src.config.Config') as mock_config:
             get_config(config_file='/custom/config.ini')
             mock_config.assert_called_once_with('/custom/config.ini')
 

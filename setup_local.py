@@ -58,12 +58,12 @@ def create_zip_package():
     import shutil
     
     # Create ops_api directory structure
-    os.makedirs(os.path.join(temp_dir, 'ops_api'))
+    os.makedirs(os.path.join(temp_dir, 'src'))
     
     # Copy Python files from ops_api directory
-    for item in os.listdir('ops_api'):
-        src_path = os.path.join('ops_api', item)
-        dst_path = os.path.join(temp_dir, 'ops_api', item)
+    for item in os.listdir('src'):
+        src_path = os.path.join('src', item)
+        dst_path = os.path.join(temp_dir, 'src', item)
         
         if os.path.isdir(src_path):
             shutil.copytree(src_path, dst_path)

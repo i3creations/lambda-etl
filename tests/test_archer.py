@@ -54,7 +54,7 @@ class TestArcherAuth(unittest.TestCase):
                 return []
         
         # Patch the ArcherAuth import to use our mock class
-        with patch('ops_api.archer.auth.ArcherAuth', MockArcherAuth):
+        with patch('src.archer.auth.ArcherAuth', MockArcherAuth):
             # Import the get_archer_auth function
             from ops_api.archer.auth import get_archer_auth
             
@@ -80,7 +80,7 @@ class TestArcherAuth(unittest.TestCase):
             result = auth.get_sir_data(since_date=since_date)
             self.assertEqual(result, [])
 
-    @patch('ops_api.archer.auth.ArcherAuth')
+    @patch('src.archer.auth.ArcherAuth')
     def test_get_archer_auth_success(self, mock_archer_auth):
         """Test successful creation of an ArcherAuth instance."""
         # Setup the mock
@@ -98,7 +98,7 @@ class TestArcherAuth(unittest.TestCase):
         # Verify the result is the mock instance
         self.assertEqual(result, mock_instance)
 
-    @patch('ops_api.archer.auth.ArcherAuth')
+    @patch('src.archer.auth.ArcherAuth')
     def test_get_archer_auth_with_empty_config(self, mock_archer_auth):
         """Test creation of an ArcherAuth instance with empty config."""
         # Setup the mock
@@ -114,8 +114,8 @@ class TestArcherAuth(unittest.TestCase):
         # Verify the result is the mock instance
         self.assertEqual(result, mock_instance)
 
-    @patch('ops_api.archer.auth.ArcherAuth')
-    @patch('ops_api.archer.auth.logger')
+    @patch('src.archer.auth.ArcherAuth')
+    @patch('src.archer.auth.logger')
     def test_get_archer_auth_exception(self, mock_logger, mock_archer_auth):
         """Test exception handling when creating an ArcherAuth instance."""
         # Setup the mock to raise an exception
@@ -131,7 +131,7 @@ class TestArcherAuth(unittest.TestCase):
         # Verify that the error was logged
         mock_logger.error.assert_called_once_with("Error creating ArcherAuth instance: Test exception")
         
-    @patch('ops_api.archer.auth.ArcherAuth')
+    @patch('src.archer.auth.ArcherAuth')
     def test_get_archer_auth_partial_config(self, mock_archer_auth):
         """Test creation of an ArcherAuth instance with partial config."""
         # Setup the mock
@@ -152,7 +152,7 @@ class TestArcherAuth(unittest.TestCase):
         # Verify the result is the mock instance
         self.assertEqual(result, mock_instance)
         
-    @patch('ops_api.archer.auth.ArcherAuth')
+    @patch('src.archer.auth.ArcherAuth')
     def test_get_archer_auth_extra_config(self, mock_archer_auth):
         """Test creation of an ArcherAuth instance with extra config keys."""
         # Setup the mock
@@ -178,7 +178,7 @@ class TestArcherAuth(unittest.TestCase):
         # Verify the result is the mock instance
         self.assertEqual(result, mock_instance)
 
-    @patch('ops_api.archer.auth.ArcherAuth')
+    @patch('src.archer.auth.ArcherAuth')
     def test_get_archer_auth_ssl_verification_disabled(self, mock_archer_auth):
         """Test creation of an ArcherAuth instance with SSL verification disabled."""
         # Setup the mock
@@ -198,7 +198,7 @@ class TestArcherAuth(unittest.TestCase):
         # Verify the result is the mock instance
         self.assertEqual(result, mock_instance)
 
-    @patch('ops_api.archer.auth.ArcherAuth')
+    @patch('src.archer.auth.ArcherAuth')
     def test_get_archer_auth_ssl_verification_enabled(self, mock_archer_auth):
         """Test creation of an ArcherAuth instance with SSL verification explicitly enabled."""
         # Setup the mock
@@ -248,7 +248,7 @@ class TestArcherAuth(unittest.TestCase):
                 return []
         
         # Patch the ArcherAuth import to use our mock class
-        with patch('ops_api.archer.auth.ArcherAuth', MockArcherAuth):
+        with patch('src.archer.auth.ArcherAuth', MockArcherAuth):
             from ops_api.archer.auth import get_archer_auth
             
             # Test context manager functionality
@@ -305,7 +305,7 @@ class TestArcherAuth(unittest.TestCase):
                 return filtered_data
         
         # Patch the ArcherAuth import to use our mock class
-        with patch('ops_api.archer.auth.ArcherAuth', MockArcherAuth):
+        with patch('src.archer.auth.ArcherAuth', MockArcherAuth):
             from ops_api.archer.auth import get_archer_auth
             
             auth = get_archer_auth(self.config)

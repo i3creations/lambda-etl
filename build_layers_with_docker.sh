@@ -121,21 +121,21 @@ function create_ops_api_layer() {
     
     # Create ops_portal directory
     mkdir -p "${python_dir}/ops_portal"
-    cp ops_api/ops_portal/__init__.py "${python_dir}/ops_portal/"
-    cp ops_api/ops_portal/api.py "${python_dir}/ops_portal/"
+    cp src/ops_portal/__init__.py "${python_dir}/ops_portal/"
+    cp src/ops_portal/api.py "${python_dir}/ops_portal/"
     
     # Create processing directory
     mkdir -p "${python_dir}/processing"
-    cp ops_api/processing/__init__.py "${python_dir}/processing/"
-    cp ops_api/processing/field_mapping.py "${python_dir}/processing/"
-    cp ops_api/processing/html_stripper.py "${python_dir}/processing/"
-    cp ops_api/processing/preprocess.py "${python_dir}/processing/"
+    cp src/processing/__init__.py "${python_dir}/processing/"
+    cp src/processing/field_mapping.py "${python_dir}/processing/"
+    cp src/processing/html_stripper.py "${python_dir}/processing/"
+    cp src/processing/preprocess.py "${python_dir}/processing/"
     
     # Create utils directory
     mkdir -p "${python_dir}/utils"
-    cp ops_api/utils/__init__.py "${python_dir}/utils/"
-    cp ops_api/utils/logging_utils.py "${python_dir}/utils/"
-    cp ops_api/utils/time_utils.py "${python_dir}/utils/"
+    cp src/utils/__init__.py "${python_dir}/utils/"
+    cp src/utils/logging_utils.py "${python_dir}/utils/"
+    cp src/utils/time_utils.py "${python_dir}/utils/"
     
     # Set permissions
     chmod -R 755 "${layer_dir}"
