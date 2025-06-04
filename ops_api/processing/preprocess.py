@@ -135,12 +135,26 @@ def preprocess(data: List[Dict[str, Any]], last_run: datetime, config: Optional[
             logger.info(f"Loading category mappings from {category_mapping_file}")
             category_map = pd.read_csv(category_mapping_file)
             
+            # Ensure consistent data types for merge columns
+            merge_columns = ['Type_of_SIR', 'Category_Type', 'Sub_Category_Type']
+            
+            # Convert merge columns to string type and handle NaN/None values
+            for col in merge_columns:
+                # For the main dataframe
+                df[col] = df[col].astype(str).replace('nan', '').replace('None', '')
+                # For the category mapping dataframe
+                category_map[col] = category_map[col].astype(str).replace('nan', '').replace('None', '')
+            
+            logger.debug(f"Data types before merge - df: {df[merge_columns].dtypes.to_dict()}")
+            logger.debug(f"Data types before merge - category_map: {category_map[merge_columns].dtypes.to_dict()}")
+            
             # Merge with category mappings
             original_count = len(df)
             df = pd.merge(
                 df,
                 category_map,
-                on=['Type_of_SIR', 'Category_Type', 'Sub_Category_Type']
+                on=merge_columns,
+                how='inner'
             )
             merged_count = len(df)
             

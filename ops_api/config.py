@@ -11,6 +11,13 @@ import configparser
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    def load_dotenv(*args, **kwargs):
+        """Fallback function when python-dotenv is not available."""
+        pass
+
 from .utils.logging_utils import get_logger
 
 # Get logger for this module

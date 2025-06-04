@@ -98,3 +98,6 @@ Suspicious or Threatening Activity,Threat,Bomb (Verbal / Written),Incident,Suspi
 Suspicious or Threatening Activity,Threat,CBRN,Incident,Public Safety,HAZMAT,Share with Tenant DHS Operations Centers
 Suspicious or Threatening Activity,Threat,Cyber Threat,Incident,Cyber,Cyber,Share with Tenant DHS Operations Centers
 Suspicious or Threatening Activity,Threat,Physical Harm,Incident,Employee Incident,Threat Against Employee,Share with Tenant DHS Operations Centers
+Information Spill/Mishandling,SPII / PII,,Incident,Security,Data Breach,Share with Tenant DHS Operations Centers
+Facilitated Apprehension and Law Enforcement,Immigration,,Incident,Security,Immigration Incident,Share with Tenant DHS Operations Centers
+Facilitated Apprehension and Law Enforcement,Non-Immigration,,Incident,Public Safety,Criminal Activity,Share with Tenant DHS Operations Centers

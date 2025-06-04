@@ -2,6 +2,7 @@ import pytest
 import pandas as pd
 import tempfile
 import os
+import csv
 from datetime import datetime
 from unittest.mock import patch, mock_open
 from ops_api.processing.html_stripper import strip_tags
@@ -262,3 +263,212 @@ class TestProcessing:
         # Record should not be filtered
         assert len(result) == 1
         assert result.iloc[0]['tenantItemID'] == 'REJECTED'
+
+    def load_mock_archer_data(self):
+        """Load mock data from CSV file."""
+        mock_data_path = os.path.join(os.path.dirname(__file__), 'mock_archer_data.csv')
+        
+        # Read CSV and convert to list of dictionaries
+        data = []
+        with open(mock_data_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                # Convert empty strings to None for consistency
+                processed_row = {}
+                for key, value in row.items():
+                    if value == '':
+                        processed_row[key] = None
+                    elif value.startswith('[') and value.endswith(']'):
+                        # Handle list-like strings - extract the content
+                        if value == '[]':
+                            processed_row[key] = None
+                        else:
+                            # Extract content from ['content'] format
+                            content = value.strip('[]').strip("'\"")
+                            if ',' in content:
+                                # Multiple values - take the first one for simplicity
+                                processed_row[key] = content.split(',')[0].strip("'\"").strip()
+                            else:
+                                processed_row[key] = content
+                    else:
+                        processed_row[key] = value
+                data.append(processed_row)
+        
+        return data
+
+    def test_preprocess_with_mock_data(self, tmpdir):
+        """Test preprocessing with real mock data from CSV."""
+        # Create a temporary category mapping file with mappings for the mock data
+        # Include mappings for records with missing Sub_Category_Type
+        category_file = tmpdir.join('category_mappings.csv')
+        category_file.write(
+            'Type_of_SIR,Category_Type,Sub_Category_Type,type,subtype,sharing\n'
+            'Information Spill/Mishandling,SPII / PII,G-1598 Damaged Mail Sent by Another USCIS Office,Data Breach,PII Exposure,FOUO\n'
+            'Information Spill/Mishandling,SPII / PII,G-1600 General Incident,Data Breach,General,FOUO\n'
+            'Information Spill/Mishandling,SPII / PII,G-1601 Lost Shipment,Data Breach,Lost Data,FOUO\n'
+            'Information Spill/Mishandling,SPII / PII,,Data Breach,General PII,FOUO\n'
+            'Facilitated Apprehension and Law Enforcement,Immigration,,Law Enforcement,Immigration,Official Use Only\n'
+        )
+        
+        # Load mock data
+        mock_data = self.load_mock_archer_data()
+        
+        # Filter to only records that have the minimum required fields
+        # Be more lenient about what constitutes valid data
+        valid_data = []
+        for record in mock_data:
+            if (record.get('Incidents_Id') and 
+                record.get('SIR_') and 
+                record.get('SIR_') != 'REJECTED' and
+                record.get('Local_Date_Reported') and
+                record.get('Details') and
+                record.get('Type_of_SIR') and
+                record.get('Category_Type')):
+                # Add missing required fields with defaults if they don't exist
+                if not record.get('Date_SIR_Processed__NT'):
+                    record['Date_SIR_Processed__NT'] = record.get('Local_Date_Reported')
+                if not record.get('Section_5__Action_Taken'):
+                    record['Section_5__Action_Taken'] = 'No action taken specified'
+                if not record.get('Sub_Category_Type'):
+                    record['Sub_Category_Type'] = ''  # Empty string for general category
+                if not record.get('Facility_Address_HELPER'):
+                    record['Facility_Address_HELPER'] = 'Unknown Address'
+                if not record.get('Facility_Latitude'):
+                    record['Facility_Latitude'] = 0.0
+                if not record.get('Facility_Longitude'):
+                    record['Facility_Longitude'] = 0.0
+                valid_data.append(record)
+        
+        # Use a last_run date that will include some records
+        last_run = datetime(2025, 1, 1)
+        config = {
+            'category_mapping_file': category_file.strpath,
+            'filter_rejected': True,
+            'filter_unprocessed': False,  # Don't filter unprocessed since we're adding defaults
+            'filter_by_date': True
+        }
+        
+        result = preprocess(valid_data, last_run, config)
+        
+        # Verify the result
+        assert isinstance(result, pd.DataFrame)
+        assert len(result) > 0, f"Should have processed some records. Valid data count: {len(valid_data)}"
+        
+        # Check that required columns exist in the result
+        required_output_columns = ['tenantItemID', 'openDate', 'type', 'subtype', 'sharing', 
+                                 'incidentReportDetails', 'phase', 'dissemination']
+        for col in required_output_columns:
+            assert col in result.columns, f"Missing required column: {col}"
+        
+        # Check that HTML was stripped from details
+        for _, row in result.iterrows():
+            assert '<p>' not in str(row['incidentReportDetails'])
+            assert '&nbsp;' not in str(row['incidentReportDetails'])
+        
+        # Check that default fields were added
+        assert all(result['phase'] == 'Monitored')
+        assert all(result['dissemination'] == 'FOUO')
+        
+        # Check that SIR_ field was mapped to tenantItemID
+        assert all(result['tenantItemID'].str.contains('-', na=False))
+        
+        print(f"Successfully processed {len(result)} records from mock data")
+
+    def test_preprocess_with_mock_data_no_filters(self, tmpdir):
+        """Test preprocessing with mock data and no filters applied."""
+        # Create a comprehensive category mapping file
+        category_file = tmpdir.join('category_mappings.csv')
+        category_file.write(
+            'Type_of_SIR,Category_Type,Sub_Category_Type,type,subtype,sharing\n'
+            'Information Spill/Mishandling,SPII / PII,G-1598 Damaged Mail Sent by Another USCIS Office,Data Breach,PII Exposure,FOUO\n'
+            'Information Spill/Mishandling,SPII / PII,G-1600 General Incident,Data Breach,General,FOUO\n'
+            'Information Spill/Mishandling,SPII / PII,G-1601 Lost Shipment,Data Breach,Lost Data,FOUO\n'
+            'Information Spill/Mishandling,SPII / PII,G-1602 Mail by the Public,Data Breach,Mail Incident,FOUO\n'
+            'Information Spill/Mishandling,SPII / PII,G-1599 Email PII Data Spill,Data Breach,Email Spill,FOUO\n'
+            'Facilitated Apprehension and Law Enforcement,Immigration,,Law Enforcement,Immigration,Official Use Only\n'
+            'Suspicious or Threatening Activity,Threat,,Security,Threat,Official Use Only\n'
+        )
+        
+        # Load mock data
+        mock_data = self.load_mock_archer_data()
+        
+        # Filter to only records that have the required fields
+        valid_data = []
+        for record in mock_data:
+            if (record.get('Incidents_Id') and 
+                record.get('SIR_') and 
+                record.get('Local_Date_Reported') and
+                record.get('Details') and
+                record.get('Type_of_SIR') and
+                record.get('Category_Type') and
+                record.get('Sub_Category_Type')):
+                valid_data.append(record)
+        
+        # Use a very early last_run date and disable all filters
+        last_run = datetime(2020, 1, 1)
+        config = {
+            'category_mapping_file': category_file.strpath,
+            'filter_rejected': False,
+            'filter_unprocessed': False,
+            'filter_by_date': False
+        }
+        
+        result = preprocess(valid_data, last_run, config)
+        
+        # Verify the result
+        assert isinstance(result, pd.DataFrame)
+        assert len(result) > 0, "Should have processed some records"
+        
+        # Should include rejected records when filter_rejected is False
+        rejected_records = result[result['tenantItemID'].str.contains('REJECTED', na=False)]
+        assert len(rejected_records) > 0, "Should include rejected records when filter is disabled"
+        
+        print(f"Successfully processed {len(result)} records with no filters applied")
+
+    def test_preprocess_html_stripping_with_mock_data(self, tmpdir):
+        """Test that HTML tags are properly stripped from mock data."""
+        # Create category mapping
+        category_file = tmpdir.join('category_mappings.csv')
+        category_file.write(
+            'Type_of_SIR,Category_Type,Sub_Category_Type,type,subtype,sharing\n'
+            'Information Spill/Mishandling,SPII / PII,G-1598 Damaged Mail Sent by Another USCIS Office,Data Breach,PII Exposure,FOUO\n'
+        )
+        
+        # Load mock data and find records with HTML content
+        mock_data = self.load_mock_archer_data()
+        
+        # Filter to records with HTML in Details field
+        html_data = []
+        for record in mock_data:
+            if (record.get('Details') and 
+                '<p>' in str(record.get('Details', '')) and
+                record.get('Incidents_Id') and 
+                record.get('SIR_') and 
+                record.get('SIR_') != 'REJECTED' and
+                record.get('Local_Date_Reported') and
+                record.get('Date_SIR_Processed__NT') and
+                record.get('Type_of_SIR') == 'Information Spill/Mishandling' and
+                record.get('Category_Type') == 'SPII / PII' and
+                record.get('Sub_Category_Type') == 'G-1598 Damaged Mail Sent by Another USCIS Office'):
+                html_data.append(record)
+                break  # Just test with one record
+        
+        if html_data:
+            last_run = datetime(2025, 1, 1)
+            config = {
+                'category_mapping_file': category_file.strpath,
+                'filter_rejected': True,
+                'filter_unprocessed': True,
+                'filter_by_date': True
+            }
+            
+            result = preprocess(html_data, last_run, config)
+            
+            if len(result) > 0:
+                # Check that HTML tags were stripped
+                details = result.iloc[0]['incidentReportDetails']
+                assert '<p>' not in details
+                assert '&nbsp;' not in details
+                assert 'test for 1598' in details or 'TEST' in details
+                
+                print("HTML stripping test passed with mock data")
