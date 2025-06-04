@@ -3,6 +3,6 @@ __pycache__
 .env
 /localstack-volume
 time_log.txt
-/ops_api.egg-info
+/src.egg-info
 /build
 response.json

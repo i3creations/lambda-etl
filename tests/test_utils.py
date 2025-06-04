@@ -1,7 +1,7 @@
 import pytz
 from datetime import datetime
-from ops_api.utils.time_utils import log_time, get_current_time, update_last_run_time, format_datetime, get_last_run_time
-from ops_api.utils.logging_utils import get_logger, log_exception, setup_logging
+from src.utils.time_utils import log_time, get_current_time, update_last_run_time, format_datetime, get_last_run_time
+from src.utils.logging_utils import get_logger, log_exception, setup_logging
 
 class TestUtils:
     # Time Utils tests
@@ -41,12 +41,12 @@ class TestUtils:
     def test_logger(self):
         log = get_logger()
         assert log is not None
-        assert log.name == 'ops_api'
+        assert log.name == 'src'
         
     def test_logger_with_name(self):
         log = get_logger('test_module')
         assert log is not None
-        assert log.name == 'ops_api.test_module'
+        assert log.name == 'src.test_module'
         
     def test_log_exception(self):
         log = get_logger('test')
@@ -61,7 +61,7 @@ class TestUtils:
         log_file = tmpdir.join('test.log')
         logger = setup_logging(log_file=log_file.strpath)
         assert logger is not None
-        assert logger.name == 'ops_api'
+        assert logger.name == 'src'
         
         # Test without log file
         logger2 = setup_logging()

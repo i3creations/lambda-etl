@@ -98,7 +98,7 @@ pipeline {
                   sh """
                     pwd
                     echo "INFO: Zipping and publishing all required files for Lambda function..."
-                    zip -r lambda_package.zip config ops_api
+                    zip -r lambda_package.zip config src
                     
                     echo "INFO: Updating lambda config to use layers (should be updated so layer versions are based off output of previous step"
                     aws lambda update-function-configuration --function-name ops-api-lambda-function-devTest \

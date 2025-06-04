@@ -20,7 +20,7 @@ This package provides functionality to:
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd ops_api
+cd src
 
 # Install the required dependencies
 pip install uscis-opts
@@ -114,11 +114,11 @@ ops-api --env-file /path/to/.env
 ### Python API
 
 ```python
-from ops_api.config import get_config
-from ops_api.archer.auth import get_archer_auth
-from ops_api.processing.preprocess import preprocess
-from ops_api.ops_portal.api import send
-from ops_api.utils.time_utils import log_time
+from src.config import get_config
+from src.archer.auth import get_archer_auth
+from src.processing.preprocess import preprocess
+from src.ops_portal.api import send
+from src.utils.time_utils import log_time
 
 # Load configuration
 config = get_config('config.ini', '.env')
@@ -142,14 +142,15 @@ if not processed_data.empty:
 ## Project Structure
 
 ```
-ops_api/
+lambda-etl/
 │
 ├── README.md                      # Project documentation
 ├── setup.py                       # Package setup file
 ├── requirements.txt               # Dependencies
 ├── .gitignore                     # Git ignore file
+├── lambda_handler.py              # AWS Lambda handler function
 │
-├── ops_api/                       # Main package directory
+├── src/                           # Main package directory
 │   ├── __init__.py                # Package initialization
 │   ├── main.py                    # Main orchestration script
 │   ├── config.py                  # Configuration management
@@ -172,6 +173,7 @@ ops_api/
 │   └── utils/                     # Utility functions
 │       ├── __init__.py
 │       ├── logging_utils.py       # Logging utilities
+│       ├── secrets_manager.py     # AWS Secrets Manager utilities
 │       └── time_utils.py          # Time tracking utilities
 │
 ├── config/                        # Configuration files
@@ -189,6 +191,8 @@ ops_api/
     ├── test_archer.py             # Tests for Archer module
     ├── test_ops_portal.py         # Tests for OPS Portal module
     ├── test_processing.py         # Tests for processing module
+    ├── test_config.py             # Tests for configuration module
+    ├── test_lambda_handler.py     # Tests for Lambda handler
     └── test_utils.py              # Tests for utilities
 ```
 
@@ -438,13 +442,13 @@ python -m pytest tests/test_config.py -v
 
 ```bash
 # Run tests with coverage report
-python -m pytest tests/ --cov=ops_api
+python -m pytest tests/ --cov=src
 
 # Generate HTML coverage report
-python -m pytest tests/ --cov=ops_api --cov-report=html
+python -m pytest tests/ --cov=src --cov-report=html
 
 # Generate coverage report with missing lines
-python -m pytest tests/ --cov=ops_api --cov-report=term-missing
+python -m pytest tests/ --cov=src --cov-report=term-missing
 ```
 
 #### Running Specific Test Categories

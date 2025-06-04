@@ -9,7 +9,7 @@ from unittest.mock import patch, MagicMock
 import json
 import os
 
-from ops_api.utils.secrets_manager import (
+from src.utils.secrets_manager import (
     SecretsManager,
     get_environment_secret_name,
     load_config_from_secrets
@@ -128,8 +128,8 @@ class TestSecretManagerUtilities(unittest.TestCase):
             result = get_environment_secret_name()
             self.assertEqual(result, 'opts-dev-secret')
     
-    @patch('ops_api.utils.secrets_manager.get_secrets_manager')
-    @patch('ops_api.utils.secrets_manager.get_environment_secret_name')
+    @patch('src.utils.secrets_manager.get_secrets_manager')
+    @patch('src.utils.secrets_manager.get_environment_secret_name')
     def test_load_config_from_secrets(self, mock_get_secret_name, mock_get_secrets_manager):
         """Test loading configuration from secrets."""
         # Mock the secret name

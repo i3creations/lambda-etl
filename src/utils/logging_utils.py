@@ -47,7 +47,7 @@ def setup_logging(log_level=logging.INFO, log_file=None, log_format=None):
     logging.basicConfig(**logging_config)
     
     # Create and return a logger for the application
-    logger = logging.getLogger('ops_api')
+    logger = logging.getLogger('src')
     
     return logger
 
@@ -63,9 +63,9 @@ def get_logger(name=None):
         logging.Logger: Logger instance
     """
     if name is None:
-        return logging.getLogger('ops_api')
+        return logging.getLogger('src')
     else:
-        return logging.getLogger(f'ops_api.{name}')
+        return logging.getLogger(f'src.{name}')
 
 
 def log_exception(logger, exception, message=None):

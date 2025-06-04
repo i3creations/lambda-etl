@@ -281,24 +281,24 @@ function create_lambda_package() {
     rm -rf "${temp_dir}"
     mkdir -p "${temp_dir}"
     
-    # Copy only the ops_api package to the temporary directory
+    # Copy only the src package to the temporary directory
     # (excluding Archer_API which will be in a layer)
-    info "Copying ops_api package (excluding Archer_API)..."
+    info "Copying src package (excluding Archer_API)..."
     
-    # Create ops_api directory structure
-    mkdir -p "${temp_dir}/ops_api"
+    # Create src directory structure
+    mkdir -p "${temp_dir}/src"
     
-    # Copy Python files from ops_api directory
-    for item in ops_api/*; do
+    # Copy Python files from src directory
+    for item in src/*; do
         if [[ "${item}" == *"Archer_API"* ]]; then
             # Skip Archer_API as it will be in a layer
             continue
         fi
         
         if [ -d "${item}" ]; then
-            cp -r "${item}" "${temp_dir}/ops_api/"
+            cp -r "${item}" "${temp_dir}/src/"
         elif [[ "${item}" == *.py ]] || [[ "${item}" == *"__init__.py" ]]; then
-            cp "${item}" "${temp_dir}/ops_api/"
+            cp "${item}" "${temp_dir}/src/"
         fi
     done
     
@@ -312,7 +312,7 @@ function create_lambda_package() {
     info "Dependencies will be provided by Lambda layers..."
     
     # Create the ZIP file
-    local zip_path="${build_dir}/ops_api_lambda.zip"
+    local zip_path="${build_dir}/src_lambda.zip"
     
     # Create the ZIP file from the temporary directory
     info "Creating ZIP file..."

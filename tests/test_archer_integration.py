@@ -17,9 +17,9 @@ from typing import List, Dict, Any
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from ops_api.config import get_config
-from ops_api.archer.auth import get_archer_auth
-from ops_api.utils.logging_utils import get_logger
+from src.config import get_config
+from src.archer.auth import get_archer_auth
+from src.utils.logging_utils import get_logger
 
 # Get logger for this module
 logger = get_logger('archer.integration_test')

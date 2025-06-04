@@ -5,8 +5,8 @@ Unit tests to verify data structure compatibility with OPS Portal API swagger ex
 import pytest
 import pandas as pd
 from datetime import datetime
-from ops_api.processing.preprocess import preprocess
-from ops_api.processing.default_fields import default_fields
+from src.processing.preprocess import preprocess
+from src.processing.default_fields import default_fields
 
 
 def test_data_structure_matches_swagger():

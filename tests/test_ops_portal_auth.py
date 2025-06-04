@@ -14,9 +14,9 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 # Import the necessary modules
-from ops_api.config import Config
-from ops_api.ops_portal.api import OpsPortalClient
-from ops_api.utils.logging_utils import get_logger
+from src.config import Config
+from src.ops_portal.api import OpsPortalClient
+from src.utils.logging_utils import get_logger
 
 # Set up logging
 logger = get_logger('test_ops_portal_auth')

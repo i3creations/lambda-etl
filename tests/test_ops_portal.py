@@ -5,7 +5,7 @@ Unit tests for the OPS Portal API module using pytest.
 import pytest
 from unittest.mock import MagicMock
 import requests
-from ops_api.ops_portal.api import OpsPortalClient, send
+from src.ops_portal.api import OpsPortalClient, send
 
 
 @pytest.fixture

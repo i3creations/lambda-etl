@@ -16,12 +16,12 @@ from typing import Dict, Any
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
-from ops_api.config import get_config
-from ops_api.archer.auth import get_archer_auth
-from ops_api.processing.preprocess import preprocess
-from ops_api.ops_portal.api import send
-from ops_api.utils.time_utils import get_last_run_time, update_last_run_time
-from ops_api.utils.secrets_manager import load_config_from_secrets
+from src.config import get_config
+from src.archer.auth import get_archer_auth
+from src.processing.preprocess import preprocess
+from src.ops_portal.api import send
+from src.utils.time_utils import get_last_run_time, update_last_run_time
+from src.utils.secrets_manager import load_config_from_secrets
 
 # Set up logging
 logger = Logger(service="ops-api")

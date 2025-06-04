@@ -5,10 +5,10 @@ import os
 import csv
 from datetime import datetime
 from unittest.mock import patch, mock_open
-from ops_api.processing.html_stripper import strip_tags
-from ops_api.processing.field_mapping import get_field_mapping, map_field_name
-from ops_api.processing.default_fields import get_default_fields, get_default_value
-from ops_api.processing.preprocess import preprocess
+from src.processing.html_stripper import strip_tags
+from src.processing.field_mapping import get_field_mapping, map_field_name
+from src.processing.default_fields import get_default_fields, get_default_value
+from src.processing.preprocess import preprocess
 
 class TestProcessing:
 
