@@ -64,114 +64,17 @@ try:
             Returns:
                 List[Dict[str, Any]]: List of SIR data records
             """
-            # Ensure we're authenticated
-            if not self.authenticated:
-                self.login()
-                
             try:
-                # Import the necessary classes
-                from opts.ArcherServerClient import ArcherServerClient
+                self._ensure_authenticated()
+                client = self._create_archer_client()
+                sir_level_alias = self._find_sir_level_alias(client)
                 
-                # Create an ArcherServerClient instance
-                client = ArcherServerClient(self)
+                if not sir_level_alias:
+                    return []
                 
-                # Get the endpoints (levels) available in Archer
-                endpoints = client.get_endpoints()
-                
-                # Define the level alias for SIR data
-                # Based on the example, it seems SIR data is stored in a level called 'Incidents'
-                sir_level_alias = 'Incidents'
-                
-                # Check if the level alias exists in the available endpoints
-                # Handle both string and dictionary endpoint formats
-                endpoint_names = []
-                for endpoint in endpoints:
-                    if isinstance(endpoint, dict):
-                        # If endpoint is a dictionary, get the 'name' field
-                        endpoint_names.append(endpoint.get('name', ''))
-                    elif isinstance(endpoint, str):
-                        # If endpoint is a string, use it directly
-                        endpoint_names.append(endpoint)
-                    else:
-                        # Log unexpected endpoint format
-                        logger.warning(f"Unexpected endpoint format: {type(endpoint)} - {endpoint}")
-                        endpoint_names.append(str(endpoint))
-                
-                if sir_level_alias not in endpoint_names:
-                    logger.warning(f"Level alias '{sir_level_alias}' not found in available endpoints: {endpoint_names}")
-                    # Try to find a similar level alias
-                    for i, endpoint in enumerate(endpoints):
-                        endpoint_name = endpoint_names[i]
-                        if 'incident' in endpoint_name.lower():
-                            sir_level_alias = endpoint_name
-                            logger.info(f"Using level alias '{sir_level_alias}' instead")
-                            break
-                    else:
-                        logger.error(f"Could not find a suitable level alias for SIR data")
-                        return []
-                
-                # Get the metadata for the SIR level
-                level_data = client.get_levels_metadata([sir_level_alias])
-                
-                # Extract the SIR records
-                sir_records = level_data.get(sir_level_alias, [])
-                
-                # If since_date is provided, filter the records
-                if since_date and sir_records:
-                    # This assumes there's a field in the records that contains the creation/modification date
-                    # The field name might be different in the actual data
-                    filtered_records = []
-                    for record in sir_records:
-                        # Try to find a date field in the record
-                        record_date = None
-                        for field_name, field_value in record.items():
-                            # Look for the Date_Created field specifically
-                            if field_name == 'Date_Created' and field_value:
-                                try:
-                                    from datetime import datetime
-                                    # Try to parse the date string - handle various ISO formats
-                                    if isinstance(field_value, str):
-                                        # Handle timezone formats like -04:00, +00:00, or Z
-                                        date_str = field_value
-                                        if date_str.endswith('Z'):
-                                            date_str = date_str.replace('Z', '+00:00')
-                                        record_date = datetime.fromisoformat(date_str)
-                                        break
-                                except (ValueError, AttributeError) as e:
-                                    # If parsing fails, log the issue and continue to the next field
-                                    logger.warning(f"Failed to parse date field '{field_name}' with value '{field_value}': {e}")
-                                    continue
-                        
-                        # If a valid date was found and it's after since_date, include the record
-                        if record_date and record_date >= since_date:
-                            filtered_records.append(record)
-                        elif not record_date:
-                            # If no date was found, include the record (to be safe)
-                            logger.warning(f"No valid Date_Created field found for record, including it anyway")
-                            filtered_records.append(record)
-                    
-                    sir_records = filtered_records
-                    logger.info(f"Filtered SIR data to {len(sir_records)} records since {since_date}")
-                
-                # Filter records by Submission_Status_1 field
-                if sir_records:
-                    status_filtered_records = []
-                    for record in sir_records:
-                        # Check if Submission_Status_1 field exists and has the required value
-                        submission_status = record.get('Submission_Status_1', '')
-                        
-                        # Handle both string and list formats for submission_status
-                        if isinstance(submission_status, list):
-                            # If it's a list, check if "Assigned for Further Action" is in the list
-                            if "Assigned for Further Action" in submission_status:
-                                status_filtered_records.append(record)
-                        elif isinstance(submission_status, str):
-                            # If it's a string, do direct comparison
-                            if submission_status == "Assigned for Further Action":
-                                status_filtered_records.append(record)
-                    
-                    sir_records = status_filtered_records
-                    logger.info(f"Filtered SIR data to {len(sir_records)} records with Submission_Status_1 = 'Assigned for Further Action'")
+                sir_records = self._fetch_sir_records(client, sir_level_alias)
+                sir_records = self._filter_records_by_date(sir_records, since_date)
+                sir_records = self._filter_records_by_status(sir_records)
                 
                 logger.info(f"Retrieved {len(sir_records)} SIR records from Archer")
                 return sir_records
@@ -179,6 +82,192 @@ try:
             except Exception as e:
                 logger.exception(f"Error retrieving SIR data from Archer: {str(e)}")
                 return []
+        
+        def _ensure_authenticated(self) -> None:
+            """Ensure the client is authenticated before making requests."""
+            if not self.authenticated:
+                self.login()
+        
+        def _create_archer_client(self):
+            """Create and return an ArcherServerClient instance."""
+            from opts.ArcherServerClient import ArcherServerClient
+            return ArcherServerClient(self)
+        
+        def _find_sir_level_alias(self, client) -> Optional[str]:
+            """
+            Find the appropriate level alias for SIR data.
+            
+            Args:
+                client: ArcherServerClient instance
+                
+            Returns:
+                str: The level alias for SIR data, or None if not found
+            """
+            endpoints = client.get_endpoints()
+            sir_level_alias = 'Incidents'
+            endpoint_names = self._extract_endpoint_names(endpoints)
+            
+            if sir_level_alias in endpoint_names:
+                return sir_level_alias
+            
+            # Try to find a similar level alias
+            alternative_alias = self._find_alternative_incident_alias(endpoints, endpoint_names)
+            if alternative_alias:
+                logger.info(f"Using level alias '{alternative_alias}' instead")
+                return alternative_alias
+            
+            logger.error("Could not find a suitable level alias for SIR data")
+            return None
+        
+        def _extract_endpoint_names(self, endpoints: List) -> List[str]:
+            """
+            Extract endpoint names from various endpoint formats.
+            
+            Args:
+                endpoints: List of endpoints in various formats
+                
+            Returns:
+                List[str]: List of endpoint names
+            """
+            endpoint_names = []
+            for endpoint in endpoints:
+                if isinstance(endpoint, dict):
+                    endpoint_names.append(endpoint.get('name', ''))
+                elif isinstance(endpoint, str):
+                    endpoint_names.append(endpoint)
+                else:
+                    logger.warning(f"Unexpected endpoint format: {type(endpoint)} - {endpoint}")
+                    endpoint_names.append(str(endpoint))
+            return endpoint_names
+        
+        def _find_alternative_incident_alias(self, endpoints: List, endpoint_names: List[str]) -> Optional[str]:
+            """
+            Find an alternative incident-related endpoint alias.
+            
+            Args:
+                endpoints: List of endpoints
+                endpoint_names: List of endpoint names
+                
+            Returns:
+                str: Alternative alias if found, None otherwise
+            """
+            for i, endpoint_name in enumerate(endpoint_names):
+                if 'incident' in endpoint_name.lower():
+                    return endpoint_name
+            
+            logger.warning(f"Level alias 'Incidents' not found in available endpoints: {endpoint_names}")
+            return None
+        
+        def _fetch_sir_records(self, client, sir_level_alias: str) -> List[Dict[str, Any]]:
+            """
+            Fetch SIR records from the specified level.
+            
+            Args:
+                client: ArcherServerClient instance
+                sir_level_alias: The level alias to fetch data from
+                
+            Returns:
+                List[Dict[str, Any]]: List of SIR records
+            """
+            level_data = client.get_levels_metadata([sir_level_alias])
+            return level_data.get(sir_level_alias, [])
+        
+        def _filter_records_by_date(self, records: List[Dict[str, Any]], since_date) -> List[Dict[str, Any]]:
+            """
+            Filter records by date if since_date is provided.
+            
+            Args:
+                records: List of SIR records
+                since_date: Date to filter from
+                
+            Returns:
+                List[Dict[str, Any]]: Filtered records
+            """
+            if not since_date or not records:
+                return records
+            
+            filtered_records = []
+            for record in records:
+                record_date = self._extract_record_date(record)
+                
+                if record_date and record_date >= since_date:
+                    filtered_records.append(record)
+                elif not record_date:
+                    logger.warning("No valid Date_Created field found for record, including it anyway")
+                    filtered_records.append(record)
+            
+            logger.info(f"Filtered SIR data to {len(filtered_records)} records since {since_date}")
+            return filtered_records
+        
+        def _extract_record_date(self, record: Dict[str, Any]):
+            """
+            Extract and parse the creation date from a record.
+            
+            Args:
+                record: SIR record dictionary
+                
+            Returns:
+                datetime: Parsed date or None if not found/parseable
+            """
+            date_created = record.get('Date_Created')
+            if not date_created:
+                return None
+            
+            try:
+                from datetime import datetime
+                if isinstance(date_created, str):
+                    # Handle timezone formats like -04:00, +00:00, or Z
+                    date_str = date_created
+                    if date_str.endswith('Z'):
+                        date_str = date_str.replace('Z', '+00:00')
+                    return datetime.fromisoformat(date_str)
+            except (ValueError, AttributeError) as e:
+                logger.warning(f"Failed to parse Date_Created field with value '{date_created}': {e}")
+            
+            return None
+        
+        def _filter_records_by_status(self, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+            """
+            Filter records by Sub_Category_Type field.
+            
+            Args:
+                records: List of SIR records
+                
+            Returns:
+                List[Dict[str, Any]]: Records with status 'Assigned for Further Action'
+            """
+            if not records:
+                return records
+            
+            target_status = "Assigned for Further Action"
+            filtered_records = []
+            
+            for record in records:
+                if self._has_target_submission_status(record, target_status):
+                    filtered_records.append(record)
+            
+            logger.info(f"Filtered SIR data to {len(filtered_records)} records with Sub_Category_Type = '{target_status}'")
+            return filtered_records
+        
+        def _has_target_submission_status(self, record: Dict[str, Any], target_status: str) -> bool:
+            """
+            Check if a record has the target submission status.
+            
+            Args:
+                record: SIR record dictionary
+                target_status: The status to check for
+                
+            Returns:
+                bool: True if record has the target status
+            """
+            submission_status = record.get('Sub_Category_Type', '')
+            
+            if isinstance(submission_status, list):
+                return target_status in submission_status
+            elif isinstance(submission_status, str):
+                return submission_status == target_status
+            
+            return False
             
 except ImportError:
     logger.error(
