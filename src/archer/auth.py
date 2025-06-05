@@ -186,13 +186,26 @@ try:
             if not since_date or not records:
                 return records
             
+            # Ensure since_date is timezone-aware for comparison
+            from datetime import timezone
+            if since_date.tzinfo is None:
+                # If since_date is naive, assume it's in UTC
+                since_date = since_date.replace(tzinfo=timezone.utc)
+                logger.debug(f"Converted naive since_date to UTC: {since_date}")
+            
             filtered_records = []
             for record in records:
                 record_date = self._extract_record_date(record)
                 
-                if record_date and record_date >= since_date:
-                    filtered_records.append(record)
-                elif not record_date:
+                if record_date:
+                    # Ensure record_date is timezone-aware for comparison
+                    if record_date.tzinfo is None:
+                        record_date = record_date.replace(tzinfo=timezone.utc)
+                        logger.debug(f"Converted naive record_date to UTC: {record_date}")
+                    
+                    if record_date >= since_date:
+                        filtered_records.append(record)
+                else:
                     logger.warning("No valid Date_Created field found for record, including it anyway")
                     filtered_records.append(record)
             
@@ -215,11 +228,24 @@ try:
             
             try:
                 from datetime import datetime
+                import re
                 if isinstance(date_created, str):
                     # Handle timezone formats like -04:00, +00:00, or Z
                     date_str = date_created
                     if date_str.endswith('Z'):
                         date_str = date_str.replace('Z', '+00:00')
+                    
+                    # Fix malformed microseconds (e.g., .19 should be .190000)
+                    # Pattern matches: YYYY-MM-DDTHH:MM:SS.XX±HH:MM where XX is 1-2 digits
+                    microsecond_pattern = r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})\.(\d{1,2})([-+]\d{2}:\d{2})$'
+                    match = re.match(microsecond_pattern, date_str)
+                    if match:
+                        base_datetime, microseconds, timezone_part = match.groups()
+                        # Pad microseconds to 6 digits
+                        padded_microseconds = microseconds.ljust(6, '0')
+                        date_str = f"{base_datetime}.{padded_microseconds}{timezone_part}"
+                        logger.debug(f"Fixed microseconds format: {date_created} -> {date_str}")
+                    
                     return datetime.fromisoformat(date_str)
             except (ValueError, AttributeError) as e:
                 logger.warning(f"Failed to parse Date_Created field with value '{date_created}': {e}")
@@ -228,7 +254,7 @@ try:
         
         def _filter_records_by_status(self, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             """
-            Filter records by Sub_Category_Type field.
+            Filter records by Submission_Status_1 field.
             
             Args:
                 records: List of SIR records
@@ -246,7 +272,7 @@ try:
                 if self._has_target_submission_status(record, target_status):
                     filtered_records.append(record)
             
-            logger.info(f"Filtered SIR data to {len(filtered_records)} records with Sub_Category_Type = '{target_status}'")
+            logger.info(f"Filtered SIR data to {len(filtered_records)} records with Submission_Status_1 = '{target_status}'")
             return filtered_records
         
         def _has_target_submission_status(self, record: Dict[str, Any], target_status: str) -> bool:
@@ -260,7 +286,7 @@ try:
             Returns:
                 bool: True if record has the target status
             """
-            submission_status = record.get('Sub_Category_Type', '')
+            submission_status = record.get('Submission_Status_1', '')
             
             if isinstance(submission_status, list):
                 return target_status in submission_status
