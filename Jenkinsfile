@@ -45,7 +45,7 @@ pipeline {
               python3.9 -m venv venv
               . venv/bin/activate
               pip3.9 install --upgrade pip
-              pip3.9 install -r requirements-${layer}.txt -t ./${layer} --upgrade pip
+              pip3.9 install -r requirements-${layer}.txt -t ./${layer} --no-deps
               """
             }
             }

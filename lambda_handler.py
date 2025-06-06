@@ -10,6 +10,8 @@ import os
 import json
 import logging
 import sys
+import pytz
+import boto3
 from datetime import datetime
 from typing import Dict, Any
 
@@ -20,11 +22,44 @@ from src.config import get_config
 from src.archer.auth import get_archer_auth
 from src.processing.preprocess import preprocess
 from src.ops_portal.api import send
-from src.utils.time_utils import get_last_run_time, update_last_run_time
+from src.utils.time_utils import get_last_run_time, update_last_run_time, get_current_time
 from src.utils.secrets_manager import load_config_from_secrets
 
-# Set up logging
+# Set up logging with Eastern timezone
+from aws_lambda_powertools.logging.formatter import LambdaPowertoolsFormatter
+import json
+
+# Create a custom formatter that uses Eastern timezone
+class EasternTimezoneFormatter(LambdaPowertoolsFormatter):
+    def format(self, record):
+        # Get the original formatted message
+        formatted_record = super().format(record)
+        
+        # Parse the JSON log record
+        try:
+            log_dict = json.loads(formatted_record)
+            
+            # Convert timestamp to Eastern timezone
+            eastern_tz = pytz.timezone('US/Eastern')
+            utc_dt = datetime.fromtimestamp(record.created, tz=pytz.UTC)
+            eastern_dt = utc_dt.astimezone(eastern_tz)
+            
+            # Update the timestamp in the log record
+            log_dict['timestamp'] = eastern_dt.strftime('%Y-%m-%d %H:%M:%S,%f')[:-3] + eastern_dt.strftime('%z')
+            
+            # Return the updated JSON string
+            return json.dumps(log_dict)
+        except (json.JSONDecodeError, KeyError):
+            # If we can't parse or modify the JSON, return the original
+            return formatted_record
+
+# Create logger with custom formatter
 logger = Logger(service="ops-api")
+
+# Apply the custom formatter to the logger's handlers
+for handler in logger.handlers:
+    if hasattr(handler, 'setFormatter'):
+        handler.setFormatter(EasternTimezoneFormatter())
 
 
 def get_env_variable(name: str, default: str = None) -> str:
@@ -100,36 +135,74 @@ def load_config_from_env() -> Dict[str, Any]:
     return config
 
 
-def get_time_log_from_env() -> datetime:
+def get_last_run_time_from_ssm() -> datetime:
     """
-    Get the last run time from environment variable.
+    Get the last run time from AWS Systems Manager Parameter Store using US/Eastern timezone.
     
     Returns:
-        datetime: Last run time
+        datetime: Last run time in US/Eastern timezone
     """
     try:
-        timestamp_str = get_env_variable('OPSAPI_TIME_LOG', datetime.now().isoformat())
-        return datetime.fromisoformat(timestamp_str.strip())
+        ssm = boto3.client('ssm')
+        parameter_name = '/ops-api/last-run-time'
+        
+        try:
+            response = ssm.get_parameter(Name=parameter_name)
+            timestamp_str = response['Parameter']['Value']
+            
+            # Parse the timestamp and ensure it has timezone info
+            dt = datetime.fromisoformat(timestamp_str.strip())
+            if dt.tzinfo is None:
+                # If no timezone info, assume US/Eastern
+                tz = pytz.timezone('US/Eastern')
+                dt = tz.localize(dt)
+            
+            logger.info(f"Retrieved last run time from SSM: {dt}")
+            return dt
+            
+        except ssm.exceptions.ParameterNotFound:
+            # Parameter doesn't exist yet, this is normal for first run
+            current_time = get_current_time('US/Eastern')
+            logger.info(f"No previous run time found in SSM. Using current US/Eastern time: {current_time}")
+            return current_time
+            
     except Exception as e:
-        logger.warning(f"Error getting time log from environment: {str(e)}. Using current time.")
-        return datetime.now()
+        logger.warning(f"Error getting last run time from SSM: {str(e)}. Using current US/Eastern time.")
+        return get_current_time('US/Eastern')
 
 
-def update_time_log_in_env(timestamp: datetime) -> None:
+def update_last_run_time_in_ssm(timestamp: datetime) -> None:
     """
-    Update the last run time in environment variable.
+    Update the last run time in AWS Systems Manager Parameter Store using US/Eastern timezone.
     
     Args:
         timestamp (datetime): Timestamp to save
     """
     try:
-        # In a container environment, we can't update environment variables at runtime
-        # So we just log the new timestamp
-        logger.info(f"Would update time log to: {timestamp.isoformat()}")
-        # In a real environment, we would need to store this in a persistent storage
-        # like a file, database, or SSM parameter
+        # Ensure timestamp is in US/Eastern timezone
+        if timestamp.tzinfo is None:
+            tz = pytz.timezone('US/Eastern')
+            timestamp = tz.localize(timestamp)
+        elif timestamp.tzinfo != pytz.timezone('US/Eastern'):
+            # Convert to US/Eastern if it's in a different timezone
+            timestamp = timestamp.astimezone(pytz.timezone('US/Eastern'))
+        
+        # Store in AWS Systems Manager Parameter Store
+        ssm = boto3.client('ssm')
+        parameter_name = '/ops-api/last-run-time'
+        
+        ssm.put_parameter(
+            Name=parameter_name,
+            Value=timestamp.isoformat(),
+            Type='String',
+            Overwrite=True,
+            Description='Last run time for OPS API Lambda function in US/Eastern timezone'
+        )
+        
+        logger.info(f"Updated last run time in SSM: {timestamp.isoformat()}")
+        
     except Exception as e:
-        logger.error(f"Error updating time log: {str(e)}")
+        logger.error(f"Error updating last run time in SSM: {str(e)}")
         raise
 
 
@@ -164,8 +237,8 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
         
         logger.info("Configuration loaded from AWS Secrets Manager")
         
-        # Get the last run time
-        last_run = get_time_log_from_env()
+        # Get the last run time from SSM Parameter Store
+        last_run = get_last_run_time_from_ssm()
         logger.info(f"Last run time: {last_run}")
         
         # Authenticate with Archer and get SIR data
@@ -218,9 +291,9 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
         else:
             logger.info("No records to send")
         
-        # Update the last run time
-        current_time = datetime.now()
-        update_time_log_in_env(current_time)
+        # Update the last run time in SSM Parameter Store using US/Eastern timezone
+        current_time = get_current_time('US/Eastern')
+        update_last_run_time_in_ssm(current_time)
         
         logger.info("OPS API Lambda function completed successfully")
         
