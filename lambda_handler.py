@@ -193,41 +193,6 @@ def update_last_incident_id_in_ssm(incident_id: int) -> None:
         raise
 
 
-def update_last_run_time_in_ssm(timestamp: datetime) -> None:
-    """
-    Update the last run time in AWS Systems Manager Parameter Store using US/Eastern timezone.
-    
-    Args:
-        timestamp (datetime): Timestamp to save
-    """
-    try:
-        # Ensure timestamp is in US/Eastern timezone
-        if timestamp.tzinfo is None:
-            tz = pytz.timezone('US/Eastern')
-            timestamp = tz.localize(timestamp)
-        elif timestamp.tzinfo != pytz.timezone('US/Eastern'):
-            # Convert to US/Eastern if it's in a different timezone
-            timestamp = timestamp.astimezone(pytz.timezone('US/Eastern'))
-        
-        # Store in AWS Systems Manager Parameter Store
-        ssm = boto3.client('ssm')
-        parameter_name = '/ops-api/last-run-time'
-        
-        ssm.put_parameter(
-            Name=parameter_name,
-            Value=timestamp.isoformat(),
-            Type='String',
-            Overwrite=True,
-            Description='Last run time for OPS API Lambda function in US/Eastern timezone'
-        )
-        
-        logger.info(f"Updated last run time in SSM: {timestamp.isoformat()}")
-        
-    except Exception as e:
-        logger.error(f"Error updating last run time in SSM: {str(e)}")
-        raise
-
-
 @logger.inject_lambda_context
 def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     """
@@ -320,10 +285,6 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
             if max_incident_id is not None and max_incident_id > last_incident_id:
                 update_last_incident_id_in_ssm(int(max_incident_id))
                 logger.info(f"Updated last processed incident ID to: {max_incident_id}")
-        
-        # Update the last run time in SSM Parameter Store using US/Eastern timezone
-        current_time = get_current_time('US/Eastern')
-        update_last_run_time_in_ssm(current_time)
         
         logger.info("OPS API Lambda function completed successfully")
         
