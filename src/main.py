@@ -10,6 +10,7 @@ import os
 import sys
 import argparse
 import logging
+import boto3
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 
@@ -19,6 +20,60 @@ from .processing.preprocess import preprocess
 from .ops_portal.api import send
 from .utils.time_utils import log_time
 from .utils.logging_utils import setup_logging, get_logger
+
+
+def get_last_incident_id_from_ssm() -> int:
+    """
+    Get the last processed incident ID from AWS Systems Manager Parameter Store.
+    
+    Returns:
+        int: Last processed incident ID, or 0 if none found
+    """
+    try:
+        ssm = boto3.client('ssm')
+        parameter_name = '/ops-api/last-incident-id'
+        
+        try:
+            response = ssm.get_parameter(Name=parameter_name)
+            incident_id_str = response['Parameter']['Value']
+            
+            # Parse the incident ID
+            incident_id = int(incident_id_str.strip())
+            
+            return incident_id
+            
+        except ssm.exceptions.ParameterNotFound:
+            # Parameter doesn't exist yet, this is normal for first run
+            return 0
+            
+    except Exception as e:
+        print(f"Warning: Error getting last incident ID from SSM: {str(e)}. Starting from 0.")
+        return 0
+
+
+def update_last_incident_id_in_ssm(incident_id: int) -> None:
+    """
+    Update the last processed incident ID in AWS Systems Manager Parameter Store.
+    
+    Args:
+        incident_id (int): Incident ID to save
+    """
+    try:
+        # Store in AWS Systems Manager Parameter Store
+        ssm = boto3.client('ssm')
+        parameter_name = '/ops-api/last-incident-id'
+        
+        ssm.put_parameter(
+            Name=parameter_name,
+            Value=str(incident_id),
+            Type='String',
+            Overwrite=True,
+            Description='Last processed incident ID for OPS API'
+        )
+        
+    except Exception as e:
+        print(f"Error updating last incident ID in SSM: {str(e)}")
+        raise
 
 
 def parse_args():
@@ -98,9 +153,8 @@ def main():
         config = get_config(args.config, env_file)
         logger.info(f"Configuration loaded from {args.config or 'default config file'} and {env_file}")
         
-        # Get the last run incident ID
-        time_log_path = args.time_log or config.get('general', 'time_log_path', 'time_log.txt')
-        last_incident_id = log_time(time_log_path)
+        # Get the last processed incident ID from SSM Parameter Store
+        last_incident_id = get_last_incident_id_from_ssm()
         logger.info(f"Last processed incident ID: {last_incident_id}")
         
         # Authenticate with Archer and get SIR data
@@ -137,6 +191,14 @@ def main():
                         logger.error(f"Failed to send record {id}: {status} - {response}")
         else:
             logger.info("No records to send")
+        
+        # Update the last processed incident ID if we processed any records
+        if not processed_data.empty and 'Incident_ID' in processed_data.columns:
+            # Find the highest incident ID from the processed records
+            max_incident_id = processed_data['Incident_ID'].max()
+            if max_incident_id is not None and max_incident_id > last_incident_id:
+                update_last_incident_id_in_ssm(int(max_incident_id))
+                logger.info(f"Updated last processed incident ID to: {max_incident_id}")
         
         logger.info("OPS API completed successfully")
         return 0

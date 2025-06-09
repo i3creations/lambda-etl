@@ -219,7 +219,7 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
             'categories_not_to_send_file': 'config/categories_not_to_send.csv',
             'filter_rejected': True,
             'filter_unprocessed': True,
-            'filter_by_date': True
+            'filter_by_incident_id': True
         }
         
         logger.info("Configuration loaded from AWS Secrets Manager")

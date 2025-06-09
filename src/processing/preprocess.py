@@ -23,7 +23,7 @@ from ..utils.logging_utils import get_logger
 logger = get_logger('processing.preprocess')
 
 
-def preprocess(data: List[Dict[str, Any]], last_run: datetime, config: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
+def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
     """
     Preprocess Significant Incident Report (SIR) data.
     
@@ -32,7 +32,7 @@ def preprocess(data: List[Dict[str, Any]], last_run: datetime, config: Optional[
     
     Args:
         data (List[Dict[str, Any]]): Raw SIR data from the Archer system
-        last_run (datetime): Timestamp of the last successful run
+        last_incident_id (int): ID of the last processed incident
         config (Dict[str, Any], optional): Configuration dictionary. If None, uses default values.
         
     Returns:
@@ -50,13 +50,13 @@ def preprocess(data: List[Dict[str, Any]], last_run: datetime, config: Optional[
             'category_mapping_file': 'config/category_mappings.csv',
             'filter_rejected': True,
             'filter_unprocessed': True,
-            'filter_by_date': True
+            'filter_by_incident_id': True
         }
     
-    category_mapping_file = config.get('category_mapping_file', 'map.csv')
+    category_mapping_file = config.get('category_mapping_file', 'config/category_mappings.csv')
     filter_rejected = config.get('filter_rejected', True)
     filter_unprocessed = config.get('filter_unprocessed', True)
-    filter_by_date = config.get('filter_by_date', True)
+    filter_by_incident_id = config.get('filter_by_incident_id', True)
     
     try:
         # Check if data is empty
@@ -111,15 +111,10 @@ def preprocess(data: List[Dict[str, Any]], last_run: datetime, config: Optional[
             logger.info("Applying filter: excluding unprocessed SIRs")
             filter_mask = filter_mask & (~df['Date_SIR_Processed__NT'].isnull())
             
-        if filter_by_date:
-            logger.info(f"Applying filter: excluding records after {last_run}")
-            # Convert to timezone-aware datetime for comparison
-            df_dates = pd.to_datetime(df['Local_Date_Reported'], utc=True)
-            if last_run.tzinfo is None:
-                # Make last_run timezone-aware if it isn't already
-                from datetime import timezone
-                last_run = last_run.replace(tzinfo=timezone.utc)
-            filter_mask = filter_mask & (df_dates < last_run)
+        if filter_by_incident_id:
+            logger.info(f"Applying filter: excluding records with incident ID <= {last_incident_id}")
+            # Filter by incident ID - only include records with ID greater than last processed ID
+            filter_mask = filter_mask & (df.index > last_incident_id)
         
         if not filter_mask.all():
             df = df.loc[filter_mask]
