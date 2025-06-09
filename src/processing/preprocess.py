@@ -62,7 +62,16 @@ def preprocess(data: List[Dict[str, Any]], last_run: datetime, config: Optional[
         # Check if data is empty
         if not data:
             logger.warning("No data to process")
-            return pd.DataFrame()
+            # Return empty DataFrame with expected column structure
+            expected_columns = list(field_names.values()) + list(default_fields.keys())
+            # Remove duplicates while preserving order
+            seen = set()
+            unique_columns = []
+            for col in expected_columns:
+                if col not in seen:
+                    unique_columns.append(col)
+                    seen.add(col)
+            return pd.DataFrame(columns=unique_columns)
         
         logger.info(f"Processing {len(data)} records")
         
