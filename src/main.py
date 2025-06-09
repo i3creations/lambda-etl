@@ -98,22 +98,22 @@ def main():
         config = get_config(args.config, env_file)
         logger.info(f"Configuration loaded from {args.config or 'default config file'} and {env_file}")
         
-        # Get the last run time
+        # Get the last run incident ID
         time_log_path = args.time_log or config.get('general', 'time_log_path', 'time_log.txt')
-        last_run = log_time(time_log_path)
-        logger.info(f"Last run time: {last_run}")
+        last_incident_id = log_time(time_log_path)
+        logger.info(f"Last processed incident ID: {last_incident_id}")
         
         # Authenticate with Archer and get SIR data
         archer_config = config.get_section('archer')
         archer = get_archer_auth(archer_config)
         
         logger.info("Retrieving SIR data from Archer")
-        raw_data = archer.get_sir_data(since_date=last_run)
+        raw_data = archer.get_sir_data(since_incident_id=last_incident_id)
         logger.info(f"Retrieved {len(raw_data)} records from Archer")
         
         # Preprocess the data
         processing_config = config.get_section('processing')
-        processed_data = preprocess(raw_data, last_run, processing_config)
+        processed_data = preprocess(raw_data, last_incident_id, processing_config)
         logger.info(f"Processed {len(processed_data)} records")
         
         # Send the processed data to the OPS Portal

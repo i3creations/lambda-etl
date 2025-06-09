@@ -41,13 +41,13 @@ class TestArcherAuth(unittest.TestCase):
         # Test initial authentication state
         self.assertFalse(auth.authenticated)
         
-        # Test get_sir_data method without since_date
+        # Test get_sir_data method without since_incident_id
         result = auth.get_sir_data()
         self.assertEqual(result, [])
         
-        # Test get_sir_data method with since_date
-        since_date = datetime.now()
-        result = auth.get_sir_data(since_date=since_date)
+        # Test get_sir_data method with since_incident_id
+        since_incident_id = 100
+        result = auth.get_sir_data(since_incident_id=since_incident_id)
         self.assertEqual(result, [])
 
     def test_archer_auth_ssl_verification_config(self):
@@ -149,13 +149,13 @@ class TestArcherAuth(unittest.TestCase):
         # Test the fallback implementation directly
         auth = get_archer_auth(self.config)
         
-        # Test without date filter - fallback should return empty list
+        # Test without incident ID filter - fallback should return empty list
         all_data = auth.get_sir_data()
         self.assertEqual(all_data, [])
         
-        # Test with date filter - fallback should return empty list
-        since_date = datetime(2023, 7, 1, tzinfo=timezone.utc)
-        filtered_data = auth.get_sir_data(since_date=since_date)
+        # Test with incident ID filter - fallback should return empty list
+        since_incident_id = 100
+        filtered_data = auth.get_sir_data(since_incident_id=since_incident_id)
         self.assertEqual(filtered_data, [])
 
 

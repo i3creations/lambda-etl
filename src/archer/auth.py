@@ -53,13 +53,13 @@ try:
                 self.session.verify = False
                 logger.info("SSL verification enabled for Archer authentication")
         
-        def get_sir_data(self, since_date=None) -> List[Dict[str, Any]]:
+        def get_sir_data(self, since_incident_id=None) -> List[Dict[str, Any]]:
             """
             Retrieve Significant Incident Report (SIR) data from Archer.
             
             Args:
-                since_date (datetime, optional): If provided, only retrieve SIRs created
-                    or modified since this date.
+                since_incident_id (int, optional): If provided, only retrieve SIRs with
+                    Incident_ID greater than this value.
                     
             Returns:
                 List[Dict[str, Any]]: List of SIR data records
@@ -73,7 +73,7 @@ try:
                     return []
                 
                 sir_records = self._fetch_sir_records(client, sir_level_alias)
-                sir_records = self._filter_records_by_date(sir_records, since_date)
+                sir_records = self._filter_records_by_incident_id(sir_records, since_incident_id)
                 sir_records = self._filter_records_by_status(sir_records)
                 
                 logger.info(f"Retrieved {len(sir_records)} SIR records from Archer")
@@ -172,45 +172,64 @@ try:
             level_data = client.get_levels_metadata([sir_level_alias])
             return level_data.get(sir_level_alias, [])
         
-        def _filter_records_by_date(self, records: List[Dict[str, Any]], since_date) -> List[Dict[str, Any]]:
+        def _filter_records_by_incident_id(self, records: List[Dict[str, Any]], since_incident_id) -> List[Dict[str, Any]]:
             """
-            Filter records by date if since_date is provided.
+            Filter records by Incident_ID if since_incident_id is provided.
             
             Args:
                 records: List of SIR records
-                since_date: Date to filter from
+                since_incident_id: Incident ID to filter from (only include records with ID > this value)
                 
             Returns:
                 List[Dict[str, Any]]: Filtered records
             """
-            if not since_date or not records:
+            if since_incident_id is None or not records:
                 return records
-            
-            # Ensure since_date is timezone-aware for comparison
-            from datetime import timezone
-            if since_date.tzinfo is None:
-                # If since_date is naive, assume it's in UTC
-                since_date = since_date.replace(tzinfo=timezone.utc)
-                logger.debug(f"Converted naive since_date to UTC: {since_date}")
             
             filtered_records = []
             for record in records:
-                record_date = self._extract_record_date(record)
+                record_incident_id = self._extract_incident_id(record)
                 
-                if record_date:
-                    # Ensure record_date is timezone-aware for comparison
-                    if record_date.tzinfo is None:
-                        record_date = record_date.replace(tzinfo=timezone.utc)
-                        logger.debug(f"Converted naive record_date to UTC: {record_date}")
-                    
-                    if record_date >= since_date:
+                if record_incident_id is not None:
+                    if record_incident_id > since_incident_id:
                         filtered_records.append(record)
                 else:
-                    logger.warning("No valid Date_Created field found for record, including it anyway")
+                    logger.warning("No valid Incident_ID field found for record, including it anyway")
                     filtered_records.append(record)
             
-            logger.info(f"Filtered SIR data to {len(filtered_records)} records since {since_date}")
+            logger.info(f"Filtered SIR data to {len(filtered_records)} records with Incident_ID > {since_incident_id}")
             return filtered_records
+        
+        def _extract_incident_id(self, record: Dict[str, Any]):
+            """
+            Extract and parse the Incident_ID from a record.
+            
+            Args:
+                record: SIR record dictionary
+                
+            Returns:
+                int: Parsed Incident_ID or None if not found/parseable
+            """
+            incident_id = record.get('Incident_ID')
+            if incident_id is None:
+                return None
+            
+            try:
+                # Handle various formats of incident_id
+                if isinstance(incident_id, int):
+                    return incident_id
+                elif isinstance(incident_id, str):
+                    # Try to convert string to int
+                    return int(incident_id.strip())
+                elif isinstance(incident_id, (list, tuple)) and len(incident_id) > 0:
+                    # If it's a list/tuple, take the first element
+                    return int(str(incident_id[0]).strip())
+                else:
+                    logger.warning(f"Unexpected Incident_ID format: {type(incident_id)} - {incident_id}")
+                    return None
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Failed to parse Incident_ID field with value '{incident_id}': {e}")
+                return None
         
         def _extract_record_date(self, record: Dict[str, Any]):
             """
@@ -353,13 +372,13 @@ except ImportError:
             self.logout()
             return False
             
-        def get_sir_data(self, since_date=None) -> List[Dict[str, Any]]:
+        def get_sir_data(self, since_incident_id=None) -> List[Dict[str, Any]]:
             """
             Retrieve Significant Incident Report (SIR) data from Archer.
             
             Args:
-                since_date (datetime, optional): If provided, only retrieve SIRs created
-                    or modified since this date.
+                since_incident_id (int, optional): If provided, only retrieve SIRs with
+                    Incident_ID greater than this value.
                     
             Returns:
                 List[Dict[str, Any]]: List of SIR data records

@@ -49,7 +49,7 @@ class TestArcherIntegration(unittest.TestCase):
         
         This test will:
         1. Connect to the Archer API using configuration
-        2. Fetch SIR data from the last 30 days
+        2. Fetch SIR data with Incident_ID greater than a specified value
         3. Save the data as a CSV file for examination
         4. Validate the data structure
         """
@@ -68,15 +68,15 @@ class TestArcherIntegration(unittest.TestCase):
             logger.info("Creating Archer authentication instance")
             archer_auth = get_archer_auth(self.archer_config)
             
-            # Set date range for data fetching (last 30 days)
-            since_date = datetime.now() - timedelta(days=30)
-            logger.info(f"Fetching SIR data since: {since_date}")
+            # Set incident ID range for data fetching (start from incident ID 400 for recent data)
+            since_incident_id = 400
+            logger.info(f"Fetching SIR data since incident ID: {since_incident_id}")
             
             # Fetch SIR data using context manager
             sir_data = []
             with archer_auth:
                 logger.info("Authenticated with Archer API")
-                sir_data = archer_auth.get_sir_data(since_date=since_date)
+                sir_data = archer_auth.get_sir_data(since_incident_id=since_incident_id)
             
             logger.info(f"Retrieved {len(sir_data)} SIR records from Archer API")
             

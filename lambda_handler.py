@@ -135,40 +135,62 @@ def load_config_from_env() -> Dict[str, Any]:
     return config
 
 
-def get_last_run_time_from_ssm() -> datetime:
+def get_last_incident_id_from_ssm() -> int:
     """
-    Get the last run time from AWS Systems Manager Parameter Store using US/Eastern timezone.
+    Get the last processed incident ID from AWS Systems Manager Parameter Store.
     
     Returns:
-        datetime: Last run time in US/Eastern timezone
+        int: Last processed incident ID, or 0 if none found
     """
     try:
         ssm = boto3.client('ssm')
-        parameter_name = '/ops-api/last-run-time'
+        parameter_name = '/ops-api/last-incident-id'
         
         try:
             response = ssm.get_parameter(Name=parameter_name)
-            timestamp_str = response['Parameter']['Value']
+            incident_id_str = response['Parameter']['Value']
             
-            # Parse the timestamp and ensure it has timezone info
-            dt = datetime.fromisoformat(timestamp_str.strip())
-            if dt.tzinfo is None:
-                # If no timezone info, assume US/Eastern
-                tz = pytz.timezone('US/Eastern')
-                dt = tz.localize(dt)
+            # Parse the incident ID
+            incident_id = int(incident_id_str.strip())
             
-            logger.info(f"Retrieved last run time from SSM: {dt}")
-            return dt
+            logger.info(f"Retrieved last incident ID from SSM: {incident_id}")
+            return incident_id
             
         except ssm.exceptions.ParameterNotFound:
             # Parameter doesn't exist yet, this is normal for first run
-            current_time = get_current_time('US/Eastern')
-            logger.info(f"No previous run time found in SSM. Using current US/Eastern time: {current_time}")
-            return current_time
+            logger.info("No previous incident ID found in SSM. Starting from 0")
+            return 0
             
     except Exception as e:
-        logger.warning(f"Error getting last run time from SSM: {str(e)}. Using current US/Eastern time.")
-        return get_current_time('US/Eastern')
+        logger.warning(f"Error getting last incident ID from SSM: {str(e)}. Starting from 0.")
+        return 0
+
+
+def update_last_incident_id_in_ssm(incident_id: int) -> None:
+    """
+    Update the last processed incident ID in AWS Systems Manager Parameter Store.
+    
+    Args:
+        incident_id (int): Incident ID to save
+    """
+    try:
+        # Store in AWS Systems Manager Parameter Store
+        ssm = boto3.client('ssm')
+        parameter_name = '/ops-api/last-incident-id'
+        
+        ssm.put_parameter(
+            Name=parameter_name,
+            Value=str(incident_id),
+            Type='String',
+            Overwrite=True,
+            Description='Last processed incident ID for OPS API Lambda function'
+        )
+        
+        logger.info(f"Updated last incident ID in SSM: {incident_id}")
+        
+    except Exception as e:
+        logger.error(f"Error updating last incident ID in SSM: {str(e)}")
+        raise
 
 
 def update_last_run_time_in_ssm(timestamp: datetime) -> None:
@@ -237,21 +259,21 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
         
         logger.info("Configuration loaded from AWS Secrets Manager")
         
-        # Get the last run time from SSM Parameter Store
-        last_run = get_last_run_time_from_ssm()
-        logger.info(f"Last run time: {last_run}")
+        # Get the last processed incident ID from SSM Parameter Store
+        last_incident_id = get_last_incident_id_from_ssm()
+        logger.info(f"Last processed incident ID: {last_incident_id}")
         
         # Authenticate with Archer and get SIR data
         archer_config = config['archer']
         archer = get_archer_auth(archer_config)
         
         logger.info("Retrieving SIR data from Archer")
-        raw_data = archer.get_sir_data(since_date=last_run)
+        raw_data = archer.get_sir_data(since_incident_id=last_incident_id)
         logger.info(f"Retrieved {len(raw_data)} records from Archer")
         
         # Preprocess the data
         processing_config = config['processing']
-        processed_data = preprocess(raw_data, last_run, processing_config)
+        processed_data = preprocess(raw_data, last_incident_id, processing_config)
         logger.info(f"Processed {len(processed_data)} records")
         
         # Send the processed data to the OPS Portal
@@ -290,6 +312,14 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
                         logger.error(f"Failed to send record {id}: {status} - {response}")
         else:
             logger.info("No records to send")
+        
+        # Update the last processed incident ID if we processed any records
+        if not processed_data.empty and 'Incident_ID' in processed_data.columns:
+            # Find the highest incident ID from the processed records
+            max_incident_id = processed_data['Incident_ID'].max()
+            if max_incident_id is not None and max_incident_id > last_incident_id:
+                update_last_incident_id_in_ssm(int(max_incident_id))
+                logger.info(f"Updated last processed incident ID to: {max_incident_id}")
         
         # Update the last run time in SSM Parameter Store using US/Eastern timezone
         current_time = get_current_time('US/Eastern')
