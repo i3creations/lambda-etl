@@ -137,6 +137,49 @@ class OpsPortalClient:
         
         return '\n'.join(lines)
     
+    def log_certificate_format_details(self):
+        """
+        Log detailed information about the x509 certificate format being used.
+        This method can be called to get comprehensive certificate format information.
+        """
+        if not self.session.cert:
+            logger.info("No X.509 client certificate configured")
+            return
+        
+        logger.info("=== Current X509 Certificate Configuration ===")
+        logger.info("Certificate Type: X.509 Client Certificate")
+        logger.info("Usage: Mutual TLS (mTLS) authentication with OPS Portal API")
+        logger.info("Transport: TLS/SSL layer during HTTPS requests")
+        
+        if isinstance(self.session.cert, tuple) and len(self.session.cert) == 2:
+            cert_path, key_path = self.session.cert
+            logger.info(f"Certificate file: {cert_path}")
+            logger.info(f"Private key file: {key_path}")
+            
+            # Try to read and analyze the certificate file if it exists
+            try:
+                if os.path.exists(cert_path):
+                    with open(cert_path, 'r') as f:
+                        cert_content = f.read()
+                    
+                    if CRYPTOGRAPHY_AVAILABLE:
+                        from cryptography import x509
+                        from cryptography.hazmat.primitives import hashes
+                        certificate = x509.load_pem_x509_certificate(cert_content.encode('utf-8'))
+                        logger.info(f"Certificate Subject: {certificate.subject}")
+                        logger.info(f"Certificate Issuer: {certificate.issuer}")
+                        logger.info(f"Certificate Serial: {certificate.serial_number}")
+                        logger.info(f"Certificate Valid Until: {certificate.not_valid_after_utc}")
+                        
+                        # Log certificate fingerprint for identification
+                        sha256_fingerprint = certificate.fingerprint(hashes.SHA256()).hex()
+                        logger.info(f"Certificate SHA256 Fingerprint: {sha256_fingerprint}")
+                        
+            except Exception as e:
+                logger.warning(f"Could not analyze certificate file: {e}")
+        
+        logger.info("=== End X509 Certificate Configuration ===")
+    
     def _configure_ssl_certificate(self):
         """
         Configure SSL client certificate for the session.
@@ -184,10 +227,54 @@ class OpsPortalClient:
             # Validate certificate first
             try:
                 from cryptography import x509
+                from cryptography.hazmat.primitives import hashes
                 certificate = x509.load_pem_x509_certificate(cert_content.encode('utf-8'))
                 logger.info(f"Certificate validation successful - Subject: {certificate.subject}")
                 logger.info(f"Certificate valid from: {certificate.not_valid_before_utc}")
                 logger.info(f"Certificate valid until: {certificate.not_valid_after_utc}")
+                
+                # Log detailed x509 certificate format information
+                logger.info("=== X509 Certificate Format Details ===")
+                logger.info(f"Certificate Version: {certificate.version.name} (v{certificate.version.value})")
+                logger.info(f"Serial Number: {certificate.serial_number}")
+                logger.info(f"Issuer: {certificate.issuer}")
+                logger.info(f"Subject: {certificate.subject}")
+                logger.info(f"Signature Algorithm: {certificate.signature_algorithm_oid._name}")
+                # Log public key details
+                public_key = certificate.public_key()
+                
+                # Determine public key algorithm type
+                from cryptography.hazmat.primitives.asymmetric import rsa, ec, dsa
+                if isinstance(public_key, rsa.RSAPublicKey):
+                    logger.info(f"Public Key Algorithm: RSA")
+                    logger.info(f"Public Key Size: {public_key.key_size} bits")
+                elif isinstance(public_key, ec.EllipticCurvePublicKey):
+                    logger.info(f"Public Key Algorithm: ECDSA")
+                    logger.info(f"Public Key Size: {public_key.curve.key_size} bits")
+                elif isinstance(public_key, dsa.DSAPublicKey):
+                    logger.info(f"Public Key Algorithm: DSA")
+                    logger.info(f"Public Key Size: {public_key.key_size} bits")
+                else:
+                    logger.info(f"Public Key Algorithm: {type(public_key).__name__}")
+                    if hasattr(public_key, 'key_size'):
+                        logger.info(f"Public Key Size: {public_key.key_size} bits")
+                
+                # Log certificate extensions
+                logger.info("Certificate Extensions:")
+                for ext in certificate.extensions:
+                    logger.info(f"  - {ext.oid._name}: Critical={ext.critical}")
+                
+                # Log certificate fingerprints
+                sha1_fingerprint = certificate.fingerprint(hashes.SHA1()).hex()
+                sha256_fingerprint = certificate.fingerprint(hashes.SHA256()).hex()
+                logger.info(f"SHA1 Fingerprint: {sha1_fingerprint}")
+                logger.info(f"SHA256 Fingerprint: {sha256_fingerprint}")
+                
+                # Log certificate format
+                logger.info("Certificate Format: X.509 v3 (PEM encoded)")
+                logger.info("Certificate Encoding: PEM (Privacy-Enhanced Mail)")
+                logger.info("=== End X509 Certificate Format Details ===")
+                
             except Exception as cert_error:
                 logger.error(f"Certificate validation failed: {cert_error}")
                 raise
@@ -199,6 +286,33 @@ class OpsPortalClient:
                     password=None
                 )
                 logger.info("Private key loaded successfully")
+                
+                # Log detailed private key format information
+                logger.info("=== Private Key Format Details ===")
+                
+                # Determine private key algorithm type
+                from cryptography.hazmat.primitives.asymmetric import rsa, ec, dsa
+                if isinstance(private_key, rsa.RSAPrivateKey):
+                    logger.info(f"Private Key Algorithm: RSA")
+                    logger.info(f"Private Key Size: {private_key.key_size} bits")
+                elif isinstance(private_key, ec.EllipticCurvePrivateKey):
+                    logger.info(f"Private Key Algorithm: ECDSA")
+                    logger.info(f"Private Key Size: {private_key.curve.key_size} bits")
+                elif isinstance(private_key, dsa.DSAPrivateKey):
+                    logger.info(f"Private Key Algorithm: DSA")
+                    logger.info(f"Private Key Size: {private_key.key_size} bits")
+                else:
+                    logger.info(f"Private Key Algorithm: {type(private_key).__name__}")
+                    if hasattr(private_key, 'key_size'):
+                        logger.info(f"Private Key Size: {private_key.key_size} bits")
+                
+                # Log key format details
+                logger.info("Private Key Format: PKCS#8 or PKCS#1 (PEM encoded)")
+                logger.info("Private Key Encoding: PEM (Privacy-Enhanced Mail)")
+                
+                # Log if key is encrypted (password protected)
+                logger.info("Private Key Encryption: None (unencrypted)")
+                logger.info("=== End Private Key Format Details ===")
                 
             except Exception as key_error:
                 logger.error(f"Private key validation failed: {key_error}")
@@ -291,6 +405,17 @@ class OpsPortalClient:
             logger.info(f"Authenticating with OPS Portal API at {self.auth_url}")
             logger.info(f"SSL verification enabled: {self.verify_ssl}")
             logger.info(f"Client certificate configured: {bool(self.session.cert)}")
+            
+            # Log x509 certificate usage for OPS API
+            if self.session.cert:
+                logger.info("=== X509 Certificate Usage for OPS API ===")
+                logger.info("Using X.509 client certificate for mutual TLS authentication")
+                if isinstance(self.session.cert, tuple) and len(self.session.cert) == 2:
+                    cert_path, key_path = self.session.cert
+                    logger.info(f"Certificate file path: {cert_path}")
+                    logger.info(f"Private key file path: {key_path}")
+                logger.info("Certificate will be sent to OPS Portal API for client authentication")
+                logger.info("=== End X509 Certificate Usage ===")
             
             # Use lowercase field names as shown in the reference example
             creds = {
@@ -400,6 +525,11 @@ class OpsPortalClient:
         record_id = record.get('tenantItemID', 'unknown')
         
         try:
+            # Log x509 certificate usage for this API call
+            if self.session.cert:
+                logger.debug(f"Sending record {record_id} to OPS API using X.509 client certificate authentication")
+                logger.debug("X.509 certificate format: PEM-encoded, will be presented during TLS handshake")
+            
             response = self.session.post(
                 self.item_url,
                 json=record
