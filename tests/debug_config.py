@@ -8,13 +8,13 @@ import sys
 from pathlib import Path
 
 # Add the project root to the Python path
-project_root = Path(__file__).parent
+project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv
-    load_dotenv('.env')
+    load_dotenv(project_root / '.env')
     print("✅ Loaded .env file")
 except ImportError:
     print("⚠️  python-dotenv not available, assuming environment variables are already loaded")
@@ -70,7 +70,6 @@ def debug_config():
             'verify_ssl': ops_config.get('verify_ssl', 'true').lower() == 'true',
             'cert_pem': ops_config.get('cert_pem'),
             'key_pem': ops_config.get('key_pem'),
-            'cert_password': ops_config.get('cert_password')
         }
         
         for key, value in ops_portal_config.items():

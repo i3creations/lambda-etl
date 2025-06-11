@@ -112,8 +112,6 @@ def test_ops_portal_auth_with_certificate():
         # Check if certificate information is available
         cert_pem = ops_config.get('cert_pem')
         key_pem = ops_config.get('key_pem')
-        cert_password = ops_config.get('cert_password')
-        
         if not cert_pem or not key_pem:
             logger.warning("Certificate or key not found in configuration - skipping certificate test")
             return None
@@ -121,7 +119,6 @@ def test_ops_portal_auth_with_certificate():
         logger.info(f"Certificate information found:")
         logger.info(f"  - Certificate PEM length: {len(cert_pem)} characters")
         logger.info(f"  - Key PEM length: {len(key_pem)} characters")
-        logger.info(f"  - Certificate password provided: {bool(cert_password)}")
         
         # Map the configuration keys to what OpsPortalClient expects (including certificate info)
         ops_portal_config = {
@@ -131,8 +128,7 @@ def test_ops_portal_auth_with_certificate():
             'client_secret': ops_config.get('client_secret'),
             'verify_ssl': ops_config.get('verify_ssl', 'true').lower() == 'true',
             'cert_pem': cert_pem,
-            'key_pem': key_pem,
-            'cert_password': cert_password
+            'key_pem': key_pem
         }
         
         # Check if we have the required configuration
@@ -148,11 +144,10 @@ def test_ops_portal_auth_with_certificate():
         logger.info(f"  - verify_ssl: {ops_portal_config.get('verify_ssl')}")
         logger.info(f"  - certificate configured: {bool(cert_pem)}")
         logger.info(f"  - private key configured: {bool(key_pem)}")
-        logger.info(f"  - certificate password configured: {bool(cert_password)}")
         
         # Test certificate parsing first
         logger.info("Testing certificate parsing...")
-        success = test_certificate_parsing(cert_pem, key_pem, cert_password)
+        success = test_certificate_parsing(cert_pem, key_pem)
         if not success:
             logger.error("Certificate parsing failed - cannot proceed with authentication test")
             return False
@@ -202,14 +197,13 @@ def test_ops_portal_auth_with_certificate():
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise
 
-def test_certificate_parsing(cert_pem, key_pem, cert_password=None):
+def test_certificate_parsing(cert_pem, key_pem):
     """
     Test certificate and key parsing using the cryptography library.
     
     Args:
         cert_pem (str): Certificate in PEM format
         key_pem (str): Private key in PEM format
-        cert_password (str, optional): Password for the private key
         
     Returns:
         bool: True if parsing was successful, False otherwise
@@ -241,34 +235,13 @@ def test_certificate_parsing(cert_pem, key_pem, cert_password=None):
         logger.info(f"  - Valid from: {certificate.not_valid_before_utc}")
         logger.info(f"  - Valid until: {certificate.not_valid_after_utc}")
         
-        # Test private key loading
+        # Test private key loading (PEM format doesn't require password)
         logger.info("Testing private key parsing...")
-        if cert_password:
-            try:
-                # Try with password first
-                private_key = serialization.load_pem_private_key(
-                    fixed_key.encode('utf-8'),
-                    password=cert_password.encode('utf-8')
-                )
-                logger.info("✅ Private key parsed successfully with password")
-            except Exception as e:
-                logger.debug(f"Failed to load key with password: {e}")
-                # Try without password
-                try:
-                    private_key = serialization.load_pem_private_key(
-                        fixed_key.encode('utf-8'),
-                        password=None
-                    )
-                    logger.info("✅ Private key parsed successfully without password")
-                except Exception as e2:
-                    logger.error(f"❌ Failed to load private key with or without password: {e2}")
-                    return False
-        else:
-            private_key = serialization.load_pem_private_key(
-                fixed_key.encode('utf-8'),
-                password=None
-            )
-            logger.info("✅ Private key parsed successfully (no password)")
+        private_key = serialization.load_pem_private_key(
+            fixed_key.encode('utf-8'),
+            password=None
+        )
+        logger.info("✅ Private key parsed successfully")
         
         logger.info(f"  - Key type: {type(private_key).__name__}")
         logger.info(f"  - Key size: {private_key.key_size} bits")

@@ -48,7 +48,6 @@ class OpsPortalClient:
                 - key_file: Path to key file
                 - cert_pem: Certificate content as PEM string
                 - key_pem: Private key content as PEM string
-                - cert_password: Password for certificate (if password-protected)
                 - cert_data: Legacy certificate data format
         """
         self.auth_url = config.get('auth_url')
@@ -60,7 +59,6 @@ class OpsPortalClient:
         self.key_file = config.get('key_file')
         self.cert_pem = config.get('cert_pem')
         self.key_pem = config.get('key_pem')
-        self.cert_password = config.get('cert_password')
         self.cert_data = config.get('cert_data')  # Legacy format
         
         # Validate required configuration
@@ -145,7 +143,7 @@ class OpsPortalClient:
         
         Supports multiple certificate formats:
         1. File paths (cert_file + key_file)
-        2. PEM content strings (cert_pem + key_pem) - with optional password
+        2. PEM content strings (cert_pem + key_pem)
         3. Legacy cert_data format (base64 encoded)
         """
         try:
@@ -170,7 +168,7 @@ class OpsPortalClient:
         """
         Configure SSL certificate from PEM content strings.
         
-        Handles password-protected certificates using the cryptography library.
+        Uses the cryptography library to validate and configure PEM certificates.
         """
         if not CRYPTOGRAPHY_AVAILABLE:
             logger.error("cryptography library not available - cannot handle PEM certificates")
@@ -194,52 +192,17 @@ class OpsPortalClient:
                 logger.error(f"Certificate validation failed: {cert_error}")
                 raise
             
-            # Handle password-protected certificates
-            if self.cert_password:
-                logger.info("Certificate password provided - checking if key is encrypted")
+            # Load the private key (PEM format doesn't require password)
+            try:
+                private_key = serialization.load_pem_private_key(
+                    key_content.encode('utf-8'),
+                    password=None
+                )
+                logger.info("Private key loaded successfully")
                 
-                # First, try to load the private key with the password
-                try:
-                    private_key = serialization.load_pem_private_key(
-                        key_content.encode('utf-8'),
-                        password=self.cert_password.encode('utf-8')
-                    )
-                    
-                    # Re-serialize without password for use with requests
-                    key_content = private_key.private_bytes(
-                        encoding=serialization.Encoding.PEM,
-                        format=serialization.PrivateFormat.PKCS8,
-                        encryption_algorithm=serialization.NoEncryption()
-                    ).decode('utf-8')
-                    
-                    logger.info("Private key decrypted successfully with password")
-                    
-                except Exception as key_error:
-                    # If key loading with password fails, try without password
-                    logger.debug(f"Failed to load key with password: {key_error}")
-                    logger.info("Trying to load private key without password")
-                    
-                    try:
-                        private_key = serialization.load_pem_private_key(
-                            key_content.encode('utf-8'),
-                            password=None
-                        )
-                        logger.info("Private key loaded successfully without password")
-                        
-                    except Exception as no_pass_error:
-                        logger.error(f"Failed to load private key with or without password: {no_pass_error}")
-                        raise
-            else:
-                # Validate private key without password
-                try:
-                    private_key = serialization.load_pem_private_key(
-                        key_content.encode('utf-8'),
-                        password=None
-                    )
-                    logger.info("Private key validation successful (no password)")
-                except Exception as key_error:
-                    logger.error(f"Private key validation failed: {key_error}")
-                    raise
+            except Exception as key_error:
+                logger.error(f"Private key validation failed: {key_error}")
+                raise
             
             # Create temporary files for the certificate and key
             cert_fd, cert_path = tempfile.mkstemp(suffix='.pem')
