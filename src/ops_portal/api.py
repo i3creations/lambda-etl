@@ -13,6 +13,13 @@ import os
 from typing import Dict, List, Tuple, Any, Optional
 from ..utils.logging_utils import get_logger
 
+try:
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.serialization import pkcs12
+    CRYPTOGRAPHY_AVAILABLE = True
+except ImportError:
+    CRYPTOGRAPHY_AVAILABLE = False
+
 # Get logger for this module
 logger = get_logger('ops_portal.api')
 
@@ -36,6 +43,13 @@ class OpsPortalClient:
                 - client_id: Client ID for authentication
                 - client_secret: Client secret for authentication
                 - verify_ssl: Whether to verify SSL certificates (default: True)
+                Optional keys:
+                - cert_file: Path to certificate file
+                - key_file: Path to key file
+                - cert_pem: Certificate content as PEM string
+                - key_pem: Private key content as PEM string
+                - cert_password: Password for certificate (if password-protected)
+                - cert_data: Legacy certificate data format
         """
         self.auth_url = config.get('auth_url')
         self.item_url = config.get('item_url')
@@ -44,7 +58,10 @@ class OpsPortalClient:
         self.verify_ssl = config.get('verify_ssl', True)
         self.cert_file = config.get('cert_file')
         self.key_file = config.get('key_file')
-        self.cert_data = config.get('cert_data')  # For certificate data as string
+        self.cert_pem = config.get('cert_pem')
+        self.key_pem = config.get('key_pem')
+        self.cert_password = config.get('cert_password')
+        self.cert_data = config.get('cert_data')  # Legacy format
         
         # Validate required configuration
         if not self.auth_url:
@@ -56,21 +73,224 @@ class OpsPortalClient:
         self.session = requests.session()
         self.session.headers.update({
             'Accept': 'application/json',
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'User-Agent': 'OPS-Portal-Client/1.0 (Python/requests)',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive'
         })
-        self.session.verify = self.verify_ssl
+        
+        # Configure SSL verification
+        if self.verify_ssl:
+            self.session.verify = True
+        else:
+            self.session.verify = False
+            # Disable SSL warnings when verification is disabled
+            import urllib3
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         
         # Configure SSL certificate if provided
-        if self.cert_file and self.key_file:
-            self.session.cert = (self.cert_file, self.key_file)
-            logger.info("SSL client certificate configured from files")
-        elif self.cert_data:
-            # Handle certificate data as string (for Lambda environments)
-            try:
-                # Create temporary files for certificate data
-                cert_fd, cert_path = tempfile.mkstemp(suffix='.pem')
-                key_fd, key_path = tempfile.mkstemp(suffix='.key')
+        self._configure_ssl_certificate()
+        
+        # Token will be set during authentication
+        self.token = None
+    
+    def _fix_pem_format(self, pem_content: str) -> str:
+        """
+        Fix PEM format by ensuring proper line breaks.
+        
+        Args:
+            pem_content (str): PEM content that might be on one line or have \\n escape sequences
+            
+        Returns:
+            str: Properly formatted PEM content with line breaks
+        """
+        if not pem_content:
+            return pem_content
+        
+        # First, handle escape sequences - convert \\n to actual newlines
+        if '\\n' in pem_content:
+            pem_content = pem_content.replace('\\n', '\n')
+        
+        # If already has proper newlines, return as-is
+        if '\n' in pem_content:
+            return pem_content
+        
+        # Find the header and footer
+        if '-----BEGIN' not in pem_content or '-----END' not in pem_content:
+            return pem_content
+        
+        # Extract header
+        begin_start = pem_content.find('-----BEGIN')
+        begin_end = pem_content.find('-----', begin_start + 10) + 5
+        header = pem_content[begin_start:begin_end]
+        
+        # Extract footer
+        end_start = pem_content.find('-----END')
+        footer = pem_content[end_start:]
+        
+        # Extract content between header and footer
+        content = pem_content[begin_end:end_start]
+        
+        # Split content into 64-character lines (standard PEM format)
+        lines = [header]
+        for i in range(0, len(content), 64):
+            lines.append(content[i:i+64])
+        lines.append(footer)
+        
+        return '\n'.join(lines)
+    
+    def _configure_ssl_certificate(self):
+        """
+        Configure SSL client certificate for the session.
+        
+        Supports multiple certificate formats:
+        1. File paths (cert_file + key_file)
+        2. PEM content strings (cert_pem + key_pem) - with optional password
+        3. Legacy cert_data format (base64 encoded)
+        """
+        try:
+            if self.cert_file and self.key_file:
+                # Option 1: Certificate and key files
+                self.session.cert = (self.cert_file, self.key_file)
+                logger.info("SSL client certificate configured from files")
                 
+            elif self.cert_pem and self.key_pem:
+                # Option 2: PEM content strings (preferred for development and AWS Secrets)
+                self._configure_pem_certificate()
+                
+            elif self.cert_data:
+                # Option 3: Legacy format - certificate data as dict
+                self._configure_legacy_certificate()
+                
+        except Exception as e:
+            logger.error(f"Failed to configure SSL certificate: {str(e)}")
+            raise
+    
+    def _configure_pem_certificate(self):
+        """
+        Configure SSL certificate from PEM content strings.
+        
+        Handles password-protected certificates using the cryptography library.
+        """
+        if not CRYPTOGRAPHY_AVAILABLE:
+            logger.error("cryptography library not available - cannot handle PEM certificates")
+            raise ImportError("cryptography library required for PEM certificate handling")
+        
+        try:
+            # Fix PEM format if needed (ensure proper line breaks)
+            cert_content = self._fix_pem_format(self.cert_pem)
+            key_content = self._fix_pem_format(self.key_pem)
+            
+            logger.info("Validating certificate and key before configuration...")
+            
+            # Validate certificate first
+            try:
+                from cryptography import x509
+                certificate = x509.load_pem_x509_certificate(cert_content.encode('utf-8'))
+                logger.info(f"Certificate validation successful - Subject: {certificate.subject}")
+                logger.info(f"Certificate valid from: {certificate.not_valid_before_utc}")
+                logger.info(f"Certificate valid until: {certificate.not_valid_after_utc}")
+            except Exception as cert_error:
+                logger.error(f"Certificate validation failed: {cert_error}")
+                raise
+            
+            # Handle password-protected certificates
+            if self.cert_password:
+                logger.info("Certificate password provided - checking if key is encrypted")
+                
+                # First, try to load the private key with the password
+                try:
+                    private_key = serialization.load_pem_private_key(
+                        key_content.encode('utf-8'),
+                        password=self.cert_password.encode('utf-8')
+                    )
+                    
+                    # Re-serialize without password for use with requests
+                    key_content = private_key.private_bytes(
+                        encoding=serialization.Encoding.PEM,
+                        format=serialization.PrivateFormat.PKCS8,
+                        encryption_algorithm=serialization.NoEncryption()
+                    ).decode('utf-8')
+                    
+                    logger.info("Private key decrypted successfully with password")
+                    
+                except Exception as key_error:
+                    # If key loading with password fails, try without password
+                    logger.debug(f"Failed to load key with password: {key_error}")
+                    logger.info("Trying to load private key without password")
+                    
+                    try:
+                        private_key = serialization.load_pem_private_key(
+                            key_content.encode('utf-8'),
+                            password=None
+                        )
+                        logger.info("Private key loaded successfully without password")
+                        
+                    except Exception as no_pass_error:
+                        logger.error(f"Failed to load private key with or without password: {no_pass_error}")
+                        raise
+            else:
+                # Validate private key without password
+                try:
+                    private_key = serialization.load_pem_private_key(
+                        key_content.encode('utf-8'),
+                        password=None
+                    )
+                    logger.info("Private key validation successful (no password)")
+                except Exception as key_error:
+                    logger.error(f"Private key validation failed: {key_error}")
+                    raise
+            
+            # Create temporary files for the certificate and key
+            cert_fd, cert_path = tempfile.mkstemp(suffix='.pem')
+            key_fd, key_path = tempfile.mkstemp(suffix='.key')
+            
+            try:
+                # Write certificate and key to temporary files
+                with os.fdopen(cert_fd, 'w') as cert_file:
+                    cert_file.write(cert_content)
+                with os.fdopen(key_fd, 'w') as key_file:
+                    key_file.write(key_content)
+                
+                # Set proper file permissions for security
+                os.chmod(cert_path, 0o600)
+                os.chmod(key_path, 0o600)
+                
+                # Configure the session with the temporary files
+                self.session.cert = (cert_path, key_path)
+                logger.info("SSL client certificate configured from PEM content")
+                logger.info(f"Certificate file: {cert_path}")
+                logger.info(f"Key file: {key_path}")
+                
+                # Store paths for cleanup (if needed)
+                self._temp_cert_path = cert_path
+                self._temp_key_path = key_path
+                
+            except Exception as e:
+                # Clean up temporary files on error
+                try:
+                    os.unlink(cert_path)
+                    os.unlink(key_path)
+                except:
+                    pass
+                raise e
+                
+        except Exception as e:
+            logger.error(f"Failed to configure PEM certificate: {str(e)}")
+            raise
+    
+    def _configure_legacy_certificate(self):
+        """
+        Configure SSL certificate from legacy cert_data format.
+        
+        This maintains backward compatibility with the existing base64 format.
+        """
+        try:
+            # Create temporary files for certificate data
+            cert_fd, cert_path = tempfile.mkstemp(suffix='.pem')
+            key_fd, key_path = tempfile.mkstemp(suffix='.key')
+            
+            try:
                 # Write certificate data to temporary files
                 with os.fdopen(cert_fd, 'w') as cert_file:
                     cert_file.write(self.cert_data.get('cert', ''))
@@ -78,19 +298,25 @@ class OpsPortalClient:
                     key_file.write(self.cert_data.get('key', ''))
                 
                 self.session.cert = (cert_path, key_path)
-                logger.info("SSL client certificate configured from data")
+                logger.info("SSL client certificate configured from legacy cert_data")
+                
+                # Store paths for cleanup (if needed)
+                self._temp_cert_path = cert_path
+                self._temp_key_path = key_path
+                
             except Exception as e:
-                logger.error(f"Failed to configure SSL certificate from data: {str(e)}")
                 # Clean up temporary files on error
                 try:
                     os.unlink(cert_path)
                     os.unlink(key_path)
                 except:
                     pass
-        
-        # Token will be set during authentication
-        self.token = None
-    
+                raise e
+                
+        except Exception as e:
+            logger.error(f"Failed to configure legacy certificate: {str(e)}")
+            raise
+
     def authenticate(self) -> bool:
         """
         Authenticate with the OPS Portal API.
@@ -100,6 +326,8 @@ class OpsPortalClient:
         """
         try:
             logger.info(f"Authenticating with OPS Portal API at {self.auth_url}")
+            logger.info(f"SSL verification enabled: {self.verify_ssl}")
+            logger.info(f"Client certificate configured: {bool(self.session.cert)}")
             
             # Use lowercase field names as shown in the reference example
             creds = {
@@ -107,10 +335,18 @@ class OpsPortalClient:
                 'clientSecret': self.client_secret
             }
             
+            if self.client_id:
+                logger.debug(f"Authentication payload: clientId={self.client_id[:8]}...")
+            else:
+                logger.debug("Authentication payload: clientId=<empty>")
+            
             response = self.session.post(
                 self.auth_url,
-                json=creds
+                json=creds,
+                timeout=30  # Add timeout to prevent hanging
             )
+            
+            logger.info(f"Authentication response status: {response.status_code}")
             
             response.raise_for_status()
             

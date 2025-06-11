@@ -20,6 +20,7 @@ from .processing.preprocess import preprocess
 from .ops_portal.api import send
 from .utils.time_utils import log_time
 from .utils.logging_utils import setup_logging, get_logger
+from .utils.secrets_manager import load_config_from_secrets
 
 
 def get_last_incident_id_from_ssm() -> int:
@@ -148,10 +149,37 @@ def main():
     try:
         logger.info("Starting OPS API")
         
-        # Load configuration
-        env_file = args.env_file or os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
-        config = get_config(args.config, env_file)
-        logger.info(f"Configuration loaded from {args.config or 'default config file'} and {env_file}")
+        # Load configuration based on environment
+        environment = os.environ.get('ENVIRONMENT', 'development')
+        
+        if environment in ['preproduction', 'production']:
+            # Load configuration from AWS Secrets Manager
+            logger.info(f"Loading configuration from AWS Secrets Manager for {environment} environment")
+            config_dict = load_config_from_secrets()
+            
+            # Create a simple config object that mimics the Config class interface
+            class SecretsConfig:
+                def __init__(self, config_data):
+                    self.config_data = config_data
+                
+                def get_section(self, section):
+                    return self.config_data.get(section, {})
+            
+            config = SecretsConfig(config_dict)
+        else:
+            # Load configuration from files and environment variables (development)
+            logger.info("Loading configuration from files and environment variables for development")
+            
+            # Load .env file if specified
+            env_file = args.env_file or os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
+            if env_file and os.path.exists(env_file):
+                from dotenv import load_dotenv
+                load_dotenv(env_file)
+                logger.info(f"Loaded environment variables from {env_file}")
+            
+            config = get_config(args.config)
+        
+        logger.info(f"Configuration loaded successfully for {environment} environment")
         
         # Get the last processed incident ID from SSM Parameter Store
         last_incident_id = get_last_incident_id_from_ssm()

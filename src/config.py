@@ -141,6 +141,11 @@ class Config:
                 if len(parts) == 2:
                     section, key = parts
                     
+                    # Handle multi-part keys (e.g., OPSAPI_OPS_PORTAL_CERT_PEM)
+                    if section == 'ops' and key.startswith('portal_'):
+                        section = 'ops_portal'
+                        key = key[7:]  # Remove 'portal_' prefix
+                    
                     # Create section if it doesn't exist
                     if section not in self.config:
                         self.config[section] = {}
@@ -148,6 +153,13 @@ class Config:
                     # Set value
                     self.config[section][key] = value
                     logger.debug(f"Setting config[{section}][{key}] from environment variable")
+                    
+                    # Also map opsportal section to ops_portal for backward compatibility
+                    if section == 'opsportal':
+                        if 'ops_portal' not in self.config:
+                            self.config['ops_portal'] = {}
+                        self.config['ops_portal'][key] = value
+                        logger.debug(f"Also setting config[ops_portal][{key}] from environment variable")
     
     def get(self, section: str, key: str, default: Any = None) -> Any:
         """
