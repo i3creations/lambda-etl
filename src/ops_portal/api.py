@@ -11,6 +11,8 @@ import ssl
 import tempfile
 import os
 from typing import Dict, List, Tuple, Any, Optional
+from requests.adapters import HTTPAdapter
+from urllib3.util import ssl_
 from ..utils.logging_utils import get_logger
 
 try:
@@ -44,22 +46,17 @@ class OpsPortalClient:
                 - client_secret: Client secret for authentication
                 - verify_ssl: Whether to verify SSL certificates (default: True)
                 Optional keys:
-                - cert_file: Path to certificate file
-                - key_file: Path to key file
-                - cert_pem: Certificate content as PEM string
-                - key_pem: Private key content as PEM string
-                - cert_data: Legacy certificate data format
+                - cert_pfx: Path to PKCS#12 (.pfx) certificate file
+                - pfx_password: Password for the PKCS#12 file
         """
         self.auth_url = config.get('auth_url')
         self.item_url = config.get('item_url')
         self.client_id = config.get('client_id', '')
         self.client_secret = config.get('client_secret', '')
         self.verify_ssl = config.get('verify_ssl', True)
-        self.cert_file = config.get('cert_file')
-        self.key_file = config.get('key_file')
-        self.cert_pem = config.get('cert_pem')
-        self.key_pem = config.get('key_pem')
-        self.cert_data = config.get('cert_data')  # Legacy format
+        # Support both cert_pfx and cert_path for the PKCS#12 certificate file
+        self.cert_pfx = config.get('cert_pfx') or config.get('cert_path')
+        self.pfx_password = config.get('pfx_password')
         
         # Validate required configuration
         if not self.auth_url:
@@ -86,56 +83,67 @@ class OpsPortalClient:
             import urllib3
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         
-        # Configure SSL certificate if provided
+        # Configure TLS version and SSL certificate
+        self._configure_tls_version()
         self._configure_ssl_certificate()
         
         # Token will be set during authentication
         self.token = None
     
-    def _fix_pem_format(self, pem_content: str) -> str:
+    def _configure_tls_version(self):
         """
-        Fix PEM format by ensuring proper line breaks.
+        Configure the TLS version for the session.
         
-        Args:
-            pem_content (str): PEM content that might be on one line or have \\n escape sequences
+        This method creates a custom SSL context that explicitly sets TLS 1.2
+        as the minimum version to use for the HTTPS connection.
+        """
+        try:
+            # Create a custom SSL context with TLS 1.2
+            class TLSv12Adapter(HTTPAdapter):
+                def __init__(self, *args, **kwargs):
+                    # Store verify setting from the session
+                    self.verify = kwargs.pop('verify', True)
+                    super().__init__(*args, **kwargs)
+                def init_poolmanager(self, *args, **kwargs):
+                    context = ssl_.create_urllib3_context(ssl_version=ssl.PROTOCOL_TLSv1_2)
+                    # Disable older protocols
+                    context.options |= ssl.OP_NO_SSLv2
+                    context.options |= ssl.OP_NO_SSLv3
+                    context.options |= ssl.OP_NO_TLSv1
+                    context.options |= ssl.OP_NO_TLSv1_1
+                    
+                    # Handle hostname verification based on verify_ssl setting
+                    if not self.verify:
+                        context.check_hostname = False
+                        context.verify_mode = ssl.CERT_NONE
+                    
+                    kwargs['ssl_context'] = context
+                    return super().init_poolmanager(*args, **kwargs)
+                
+                def proxy_manager_for(self, *args, **kwargs):
+                    context = ssl_.create_urllib3_context(ssl_version=ssl.PROTOCOL_TLSv1_2)
+                    # Disable older protocols
+                    context.options |= ssl.OP_NO_SSLv2
+                    context.options |= ssl.OP_NO_SSLv3
+                    context.options |= ssl.OP_NO_TLSv1
+                    context.options |= ssl.OP_NO_TLSv1_1
+                    
+                    # Handle hostname verification based on verify_ssl setting
+                    if not self.verify:
+                        context.check_hostname = False
+                        context.verify_mode = ssl.CERT_NONE
+                    
+                    kwargs['ssl_context'] = context
+                    return super().proxy_manager_for(*args, **kwargs)
             
-        Returns:
-            str: Properly formatted PEM content with line breaks
-        """
-        if not pem_content:
-            return pem_content
-        
-        # First, handle escape sequences - convert \\n to actual newlines
-        if '\\n' in pem_content:
-            pem_content = pem_content.replace('\\n', '\n')
-        
-        # If already has proper newlines, return as-is
-        if '\n' in pem_content:
-            return pem_content
-        
-        # Find the header and footer
-        if '-----BEGIN' not in pem_content or '-----END' not in pem_content:
-            return pem_content
-        
-        # Extract header
-        begin_start = pem_content.find('-----BEGIN')
-        begin_end = pem_content.find('-----', begin_start + 10) + 5
-        header = pem_content[begin_start:begin_end]
-        
-        # Extract footer
-        end_start = pem_content.find('-----END')
-        footer = pem_content[end_start:]
-        
-        # Extract content between header and footer
-        content = pem_content[begin_end:end_start]
-        
-        # Split content into 64-character lines (standard PEM format)
-        lines = [header]
-        for i in range(0, len(content), 64):
-            lines.append(content[i:i+64])
-        lines.append(footer)
-        
-        return '\n'.join(lines)
+            # Mount the adapter for all HTTPS requests with verify setting
+            self.session.mount('https://', TLSv12Adapter(verify=self.verify_ssl))
+            logger.info("TLS 1.2 explicitly configured for HTTPS connections")
+            
+        except Exception as e:
+            logger.error(f"Failed to configure TLS version: {str(e)}")
+            logger.warning("Using default TLS version configuration")
+    
     
     def log_certificate_format_details(self):
         """
@@ -184,215 +192,111 @@ class OpsPortalClient:
         """
         Configure SSL client certificate for the session.
         
-        Supports multiple certificate formats:
-        1. File paths (cert_file + key_file)
-        2. PEM content strings (cert_pem + key_pem)
-        3. Legacy cert_data format (base64 encoded)
+        Uses PKCS#12 (.pfx) file format which contains the complete
+        certificate chain, which is required for successful authentication.
         """
         try:
-            if self.cert_file and self.key_file:
-                # Option 1: Certificate and key files
-                self.session.cert = (self.cert_file, self.key_file)
-                logger.info("SSL client certificate configured from files")
-                
-            elif self.cert_pem and self.key_pem:
-                # Option 2: PEM content strings (preferred for development and AWS Secrets)
-                self._configure_pem_certificate()
-                
-            elif self.cert_data:
-                # Option 3: Legacy format - certificate data as dict
-                self._configure_legacy_certificate()
+            if self.cert_pfx:
+                logger.info("Using PKCS#12 (.pfx) certificate")
+                self._configure_pfx_certificate()
+            else:
+                logger.warning("No certificate configuration provided")
                 
         except Exception as e:
             logger.error(f"Failed to configure SSL certificate: {str(e)}")
             raise
     
-    def _configure_pem_certificate(self):
+    
+    def _configure_pfx_certificate(self):
         """
-        Configure SSL certificate from PEM content strings.
+        Configure SSL certificate from PKCS#12 (.pfx) file.
         
-        Uses the cryptography library to validate and configure PEM certificates.
+        This method extracts the certificate, private key, and the entire certificate chain
+        from a PKCS#12 (.pfx) file and configures them for use with the session.
         """
         if not CRYPTOGRAPHY_AVAILABLE:
-            logger.error("cryptography library not available - cannot handle PEM certificates")
-            raise ImportError("cryptography library required for PEM certificate handling")
+            logger.error("cryptography library not available - cannot handle PKCS#12 certificates")
+            raise ImportError("cryptography library required for PKCS#12 certificate handling")
         
         try:
-            # Fix PEM format if needed (ensure proper line breaks)
-            cert_content = self._fix_pem_format(self.cert_pem)
-            key_content = self._fix_pem_format(self.key_pem)
+            # Get the password for the .pfx file
+            pfx_password = getattr(self, 'pfx_password', None)
+            if pfx_password:
+                # Remove surrounding quotes if present
+                pfx_password = pfx_password.strip("'\"")
             
-            logger.info("Validating certificate and key before configuration...")
+            # Convert password to bytes if it's not None
+            password_bytes = pfx_password.encode('utf-8') if pfx_password else None
             
-            # Validate certificate first
-            try:
-                from cryptography import x509
-                from cryptography.hazmat.primitives import hashes
-                certificate = x509.load_pem_x509_certificate(cert_content.encode('utf-8'))
-                logger.info(f"Certificate validation successful - Subject: {certificate.subject}")
-                logger.info(f"Certificate valid from: {certificate.not_valid_before_utc}")
-                logger.info(f"Certificate valid until: {certificate.not_valid_after_utc}")
-                
-                # Log detailed x509 certificate format information
-                logger.info("=== X509 Certificate Format Details ===")
-                logger.info(f"Certificate Version: {certificate.version.name} (v{certificate.version.value})")
-                logger.info(f"Serial Number: {certificate.serial_number}")
-                logger.info(f"Issuer: {certificate.issuer}")
-                logger.info(f"Subject: {certificate.subject}")
-                logger.info(f"Signature Algorithm: {certificate.signature_algorithm_oid._name}")
-                # Log public key details
-                public_key = certificate.public_key()
-                
-                # Determine public key algorithm type
-                from cryptography.hazmat.primitives.asymmetric import rsa, ec, dsa
-                if isinstance(public_key, rsa.RSAPublicKey):
-                    logger.info(f"Public Key Algorithm: RSA")
-                    logger.info(f"Public Key Size: {public_key.key_size} bits")
-                elif isinstance(public_key, ec.EllipticCurvePublicKey):
-                    logger.info(f"Public Key Algorithm: ECDSA")
-                    logger.info(f"Public Key Size: {public_key.curve.key_size} bits")
-                elif isinstance(public_key, dsa.DSAPublicKey):
-                    logger.info(f"Public Key Algorithm: DSA")
-                    logger.info(f"Public Key Size: {public_key.key_size} bits")
-                else:
-                    logger.info(f"Public Key Algorithm: {type(public_key).__name__}")
-                    if hasattr(public_key, 'key_size'):
-                        logger.info(f"Public Key Size: {public_key.key_size} bits")
-                
-                # Log certificate extensions
-                logger.info("Certificate Extensions:")
-                for ext in certificate.extensions:
-                    logger.info(f"  - {ext.oid._name}: Critical={ext.critical}")
-                
-                # Log certificate fingerprints
-                sha1_fingerprint = certificate.fingerprint(hashes.SHA1()).hex()
-                sha256_fingerprint = certificate.fingerprint(hashes.SHA256()).hex()
-                logger.info(f"SHA1 Fingerprint: {sha1_fingerprint}")
-                logger.info(f"SHA256 Fingerprint: {sha256_fingerprint}")
-                
-                # Log certificate format
-                logger.info("Certificate Format: X.509 v3 (PEM encoded)")
-                logger.info("Certificate Encoding: PEM (Privacy-Enhanced Mail)")
-                logger.info("=== End X509 Certificate Format Details ===")
-                
-            except Exception as cert_error:
-                logger.error(f"Certificate validation failed: {cert_error}")
-                raise
+            # Read the .pfx file
+            with open(self.cert_pfx, 'rb') as pfx_file:
+                pfx_data = pfx_file.read()
             
-            # Load the private key (PEM format doesn't require password)
-            try:
-                private_key = serialization.load_pem_private_key(
-                    key_content.encode('utf-8'),
-                    password=None
-                )
-                logger.info("Private key loaded successfully")
-                
-                # Log detailed private key format information
-                logger.info("=== Private Key Format Details ===")
-                
-                # Determine private key algorithm type
-                from cryptography.hazmat.primitives.asymmetric import rsa, ec, dsa
-                if isinstance(private_key, rsa.RSAPrivateKey):
-                    logger.info(f"Private Key Algorithm: RSA")
-                    logger.info(f"Private Key Size: {private_key.key_size} bits")
-                elif isinstance(private_key, ec.EllipticCurvePrivateKey):
-                    logger.info(f"Private Key Algorithm: ECDSA")
-                    logger.info(f"Private Key Size: {private_key.curve.key_size} bits")
-                elif isinstance(private_key, dsa.DSAPrivateKey):
-                    logger.info(f"Private Key Algorithm: DSA")
-                    logger.info(f"Private Key Size: {private_key.key_size} bits")
-                else:
-                    logger.info(f"Private Key Algorithm: {type(private_key).__name__}")
-                    if hasattr(private_key, 'key_size'):
-                        logger.info(f"Private Key Size: {private_key.key_size} bits")
-                
-                # Log key format details
-                logger.info("Private Key Format: PKCS#8 or PKCS#1 (PEM encoded)")
-                logger.info("Private Key Encoding: PEM (Privacy-Enhanced Mail)")
-                
-                # Log if key is encrypted (password protected)
-                logger.info("Private Key Encryption: None (unencrypted)")
-                logger.info("=== End Private Key Format Details ===")
-                
-            except Exception as key_error:
-                logger.error(f"Private key validation failed: {key_error}")
-                raise
+            logger.info(f"Reading PKCS#12 file: {self.cert_pfx}")
             
-            # Create temporary files for the certificate and key
-            cert_fd, cert_path = tempfile.mkstemp(suffix='.pem')
+            # Load the PKCS#12 data
+            private_key, certificate, additional_certificates = pkcs12.load_key_and_certificates(
+                pfx_data, 
+                password_bytes
+            )
+            
+            logger.info("Successfully parsed PKCS#12 data")
+            logger.info(f"Certificate subject: {certificate.subject}")
+            logger.info(f"Certificate issuer: {certificate.issuer}")
+            logger.info(f"Additional certificates in chain: {len(additional_certificates) if additional_certificates else 0}")
+            
+            # Create temporary files for the certificate chain and key
+            cert_chain_fd, cert_chain_path = tempfile.mkstemp(suffix='.pem')
             key_fd, key_path = tempfile.mkstemp(suffix='.key')
             
             try:
-                # Write certificate and key to temporary files
-                with os.fdopen(cert_fd, 'w') as cert_file:
-                    cert_file.write(cert_content)
-                with os.fdopen(key_fd, 'w') as key_file:
-                    key_file.write(key_content)
+                # Write the certificate chain to a temporary file
+                # Start with the end-entity certificate
+                with os.fdopen(cert_chain_fd, 'wb') as cert_chain_file:
+                    # Write the end-entity certificate
+                    cert_chain_file.write(certificate.public_bytes(serialization.Encoding.PEM))
+                    
+                    # Write all additional certificates in the chain
+                    if additional_certificates:
+                        for i, additional_cert in enumerate(additional_certificates):
+                            cert_chain_file.write(additional_cert.public_bytes(serialization.Encoding.PEM))
+                            logger.info(f"Added certificate {i+1} to chain: {additional_cert.subject}")
+                
+                # Write the private key to a temporary file
+                with os.fdopen(key_fd, 'wb') as key_file:
+                    key_file.write(private_key.private_bytes(
+                        serialization.Encoding.PEM,
+                        serialization.PrivateFormat.PKCS8,
+                        serialization.NoEncryption()
+                    ))
                 
                 # Set proper file permissions for security
-                os.chmod(cert_path, 0o600)
+                os.chmod(cert_chain_path, 0o600)
                 os.chmod(key_path, 0o600)
                 
                 # Configure the session with the temporary files
-                self.session.cert = (cert_path, key_path)
-                logger.info("SSL client certificate configured from PEM content")
-                logger.info(f"Certificate file: {cert_path}")
+                self.session.cert = (cert_chain_path, key_path)
+                logger.info("SSL client certificate configured from PKCS#12 file with complete certificate chain")
+                logger.info(f"Certificate chain file: {cert_chain_path}")
                 logger.info(f"Key file: {key_path}")
                 
                 # Store paths for cleanup (if needed)
-                self._temp_cert_path = cert_path
+                self._temp_cert_path = cert_chain_path
                 self._temp_key_path = key_path
                 
             except Exception as e:
                 # Clean up temporary files on error
                 try:
-                    os.unlink(cert_path)
+                    os.unlink(cert_chain_path)
                     os.unlink(key_path)
                 except:
                     pass
                 raise e
                 
         except Exception as e:
-            logger.error(f"Failed to configure PEM certificate: {str(e)}")
+            logger.error(f"Failed to configure PKCS#12 certificate: {str(e)}")
             raise
     
-    def _configure_legacy_certificate(self):
-        """
-        Configure SSL certificate from legacy cert_data format.
-        
-        This maintains backward compatibility with the existing base64 format.
-        """
-        try:
-            # Create temporary files for certificate data
-            cert_fd, cert_path = tempfile.mkstemp(suffix='.pem')
-            key_fd, key_path = tempfile.mkstemp(suffix='.key')
-            
-            try:
-                # Write certificate data to temporary files
-                with os.fdopen(cert_fd, 'w') as cert_file:
-                    cert_file.write(self.cert_data.get('cert', ''))
-                with os.fdopen(key_fd, 'w') as key_file:
-                    key_file.write(self.cert_data.get('key', ''))
-                
-                self.session.cert = (cert_path, key_path)
-                logger.info("SSL client certificate configured from legacy cert_data")
-                
-                # Store paths for cleanup (if needed)
-                self._temp_cert_path = cert_path
-                self._temp_key_path = key_path
-                
-            except Exception as e:
-                # Clean up temporary files on error
-                try:
-                    os.unlink(cert_path)
-                    os.unlink(key_path)
-                except:
-                    pass
-                raise e
-                
-        except Exception as e:
-            logger.error(f"Failed to configure legacy certificate: {str(e)}")
-            raise
 
     def authenticate(self) -> bool:
         """
@@ -435,6 +339,7 @@ class OpsPortalClient:
             )
             
             logger.info(f"Authentication response status: {response.status_code}")
+            logger.debug(f"TLS version used: {response.raw.connection.socket.version() if hasattr(response.raw, 'connection') and hasattr(response.raw.connection, 'socket') else 'Unknown'}")
             
             response.raise_for_status()
             
@@ -537,6 +442,11 @@ class OpsPortalClient:
             
             status_code = response.status_code
             
+            # Log TLS version used for this request if available
+            if hasattr(response.raw, 'connection') and hasattr(response.raw.connection, 'socket'):
+                tls_version = response.raw.connection.socket.version()
+                logger.debug(f"TLS version used for API call: {tls_version}")
+            
             # Handle different response types
             try:
                 response_data = response.json()
@@ -631,7 +541,9 @@ def send(data: List[Dict[str, Any]], config: Optional[Dict[str, Any]] = None) ->
             'item_url': 'https://gii-dev.ardentmc.net/dhsopsportal.api/api/Item',
             'client_id': '',
             'client_secret': '',
-            'verify_ssl': False  # Default to False for backward compatibility
+            'verify_ssl': False,  # Default to False for backward compatibility
+            'cert_pfx': None,     # Path to PKCS#12 (.pfx) certificate file
+            'pfx_password': None  # Password for the PKCS#12 file
         }
     
     client = OpsPortalClient(config)

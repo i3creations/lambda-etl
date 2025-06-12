@@ -54,23 +54,48 @@ def test_x509_logging():
     
     print("=== Testing X509 Certificate Format Logging ===")
     
-    # Configuration using actual certificate values from .env file
+    # Check for PFX certificate path from environment variable first
+    env_pfx_path = os.getenv('OPSAPI_OPS_PORTAL_CERT_PATH')
+    if env_pfx_path:
+        # If the path is relative, make it absolute from the project root
+        if not os.path.isabs(env_pfx_path):
+            pfx_path = os.path.join(parent_dir, env_pfx_path)
+        else:
+            pfx_path = env_pfx_path
+        print(f"Using PFX path from environment variable: {env_pfx_path}")
+    else:
+        # Fall back to default path
+        pfx_path = os.path.join(parent_dir, 'certs', 'giitest-api.pfx')
+        print(f"Using default PFX path: {pfx_path}")
+    
+    if not os.path.exists(pfx_path):
+        print(f"ERROR: PFX file not found at: {pfx_path}")
+        return
+    
+    # Get the password for the .pfx file from environment variables
+    pfx_password = os.getenv('OPSAPI_PFX_PASSWORD')
+    if not pfx_password:
+        # Try the certificate password from the .env file as a fallback
+        pfx_password = os.getenv('OPSAPI_OPS_PORTAL_CERT_PASSWORD')
+        if pfx_password:
+            # Remove surrounding quotes if present
+            pfx_password = pfx_password.strip("'\"")
+            print(f"Using OPSAPI_OPS_PORTAL_CERT_PASSWORD as the PFX password")
+        else:
+            print("PFX password not found in environment variables")
+            print("Attempting to use the file without a password...")
+            pfx_password = None
+    
+    # Configuration using environment variables
     config = {
         'auth_url': os.getenv('OPSAPI_OPS_PORTAL_AUTH_URL'),
         'item_url': os.getenv('OPSAPI_OPS_PORTAL_ITEM_URL'),
         'client_id': os.getenv('OPSAPI_OPS_PORTAL_CLIENT_ID'),
         'client_secret': os.getenv('OPSAPI_OPS_PORTAL_CLIENT_SECRET'),
         'verify_ssl': os.getenv('OPSAPI_OPS_PORTAL_VERIFY_SSL', 'false').lower() == 'true',
-        # Use actual certificate values from environment
-        'cert_pem': os.getenv('OPSAPI_OPS_PORTAL_CERT_PEM'),
-        'key_pem': os.getenv('OPSAPI_OPS_PORTAL_KEY_PEM')
+        'cert_pfx': pfx_path,
+        'pfx_password': pfx_password
     }
-    
-    # Verify we have the required configuration
-    if not config['cert_pem'] or not config['key_pem']:
-        print("ERROR: Certificate or key not found in environment variables")
-        print("Make sure OPSAPI_OPS_PORTAL_CERT_PEM and OPSAPI_OPS_PORTAL_KEY_PEM are set in .env file")
-        return
     
     try:
         # Create OPS Portal client - this will trigger certificate format logging
