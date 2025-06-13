@@ -48,6 +48,7 @@ class OpsPortalClient:
                 Optional keys:
                 - cert_pfx: Path to PKCS#12 (.pfx) certificate file
                 - pfx_password: Password for the PKCS#12 file
+                - cert_pfx_data: Binary PKCS#12 certificate data from AWS Secrets Manager
         """
         self.auth_url = config.get('auth_url')
         self.item_url = config.get('item_url')
@@ -57,6 +58,8 @@ class OpsPortalClient:
         # Support both cert_pfx and cert_path for the PKCS#12 certificate file
         self.cert_pfx = config.get('cert_pfx') or config.get('cert_path')
         self.pfx_password = config.get('pfx_password')
+        # Certificate data from AWS Secrets Manager
+        self.cert_pfx_data = config.get('cert_pfx_data')
         
         # Validate required configuration
         if not self.auth_url:
@@ -194,10 +197,15 @@ class OpsPortalClient:
         
         Uses PKCS#12 (.pfx) file format which contains the complete
         certificate chain, which is required for successful authentication.
+        
+        Supports both file system and AWS Secrets Manager as certificate sources.
         """
         try:
-            if self.cert_pfx:
-                logger.info("Using PKCS#12 (.pfx) certificate")
+            if self.cert_pfx_data:
+                logger.info("Using PKCS#12 certificate data from AWS Secrets Manager")
+                self._configure_pfx_certificate()
+            elif self.cert_pfx:
+                logger.info("Using PKCS#12 (.pfx) certificate from file system")
                 self._configure_pfx_certificate()
             else:
                 logger.warning("No certificate configuration provided")
@@ -209,10 +217,14 @@ class OpsPortalClient:
     
     def _configure_pfx_certificate(self):
         """
-        Configure SSL certificate from PKCS#12 (.pfx) file.
+        Configure SSL certificate from PKCS#12 (.pfx) file or data.
         
         This method extracts the certificate, private key, and the entire certificate chain
-        from a PKCS#12 (.pfx) file and configures them for use with the session.
+        from a PKCS#12 (.pfx) file or binary data and configures them for use with the session.
+        
+        It supports two sources:
+        1. File system: Using self.cert_pfx path to load the certificate from a file
+        2. AWS Secrets Manager: Using self.cert_pfx_data binary data directly
         """
         if not CRYPTOGRAPHY_AVAILABLE:
             logger.error("cryptography library not available - cannot handle PKCS#12 certificates")
@@ -228,11 +240,19 @@ class OpsPortalClient:
             # Convert password to bytes if it's not None
             password_bytes = pfx_password.encode('utf-8') if pfx_password else None
             
-            # Read the .pfx file
-            with open(self.cert_pfx, 'rb') as pfx_file:
-                pfx_data = pfx_file.read()
-            
-            logger.info(f"Reading PKCS#12 file: {self.cert_pfx}")
+            # Determine the source of the certificate (file or binary data)
+            if self.cert_pfx_data:
+                # Use binary data directly from AWS Secrets Manager
+                pfx_data = self.cert_pfx_data
+                logger.info("Using PKCS#12 certificate data from AWS Secrets Manager")
+            elif self.cert_pfx:
+                # Read the .pfx file from the file system
+                with open(self.cert_pfx, 'rb') as pfx_file:
+                    pfx_data = pfx_file.read()
+                logger.info(f"Reading PKCS#12 file from file system: {self.cert_pfx}")
+            else:
+                logger.error("No PKCS#12 certificate source available")
+                raise ValueError("No PKCS#12 certificate source available")
             
             # Load the PKCS#12 data
             private_key, certificate, additional_certificates = pkcs12.load_key_and_certificates(
@@ -435,6 +455,9 @@ class OpsPortalClient:
                 logger.debug(f"Sending record {record_id} to OPS API using X.509 client certificate authentication")
                 logger.debug("X.509 certificate format: PEM-encoded, will be presented during TLS handshake")
             
+            # Log the complete JSON payload for troubleshooting
+            logger.debug(f"Sending record {record_id} to OPS API with payload: {record}")
+            
             response = self.session.post(
                 self.item_url,
                 json=record
@@ -453,6 +476,9 @@ class OpsPortalClient:
             except ValueError:
                 # Response is not JSON (e.g., HTML error page)
                 response_data = response.text
+            
+            # Log the complete response data for troubleshooting
+            logger.debug(f"Response for record {record_id}: {response_data}")
             
             if 200 <= status_code < 300:
                 logger.info(f"Successfully sent record {record_id}")

@@ -225,8 +225,18 @@ def load_config_from_secrets() -> Dict[str, Any]:
         key_data = secret_data.get('OPSAPI_OPS_PORTAL_KEY_DATA')
         cert_pem = secret_data.get('OPSAPI_OPS_PORTAL_CERT_PEM')
         key_pem = secret_data.get('OPSAPI_OPS_PORTAL_KEY_PEM')
+        cert_pfx = secret_data.get('OPSAPI_OPS_PORTAL_CERT_PFX')
+        pfx_password = secret_data.get('OPSAPI_OPS_PORTAL_PFX_PASSWORD')
         
-        if cert_file and key_file:
+        if cert_pfx:
+            # PKCS#12 certificate data from AWS Secrets Manager
+            import base64
+            # Store the binary data directly
+            config['ops_portal']['cert_pfx_data'] = base64.b64decode(cert_pfx)
+            if pfx_password:
+                config['ops_portal']['pfx_password'] = pfx_password
+            logger.info("PKCS#12 certificate loaded from AWS Secrets Manager")
+        elif cert_file and key_file:
             config['ops_portal']['cert_file'] = cert_file
             config['ops_portal']['key_file'] = key_file
         elif cert_pem and key_pem:
