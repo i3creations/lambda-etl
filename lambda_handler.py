@@ -24,6 +24,7 @@ from src.processing.preprocess import preprocess
 from src.ops_portal.api import send
 from src.utils.time_utils import get_last_run_time, update_last_run_time, get_current_time
 from src.utils.secrets_manager import load_config_from_secrets
+from src.utils.logging_utils import get_logging_level_from_env, get_logging_level_from_config
 
 # Set up logging with Eastern timezone
 from aws_lambda_powertools.logging.formatter import LambdaPowertoolsFormatter
@@ -60,6 +61,25 @@ logger = Logger(service="ops-api")
 for handler in logger.handlers:
     if hasattr(handler, 'setFormatter'):
         handler.setFormatter(EasternTimezoneFormatter())
+
+def configure_logger_level(config=None):
+    """
+    Configure the logger level based on environment variables or AWS Secrets Manager.
+    
+    Args:
+        config (Dict[str, Any], optional): Configuration dictionary from AWS Secrets Manager
+    """
+    # Determine the log level (priority: config > environment variable > default)
+    log_level = None
+    if config:
+        log_level = get_logging_level_from_config(config)
+    
+    if log_level is None:
+        log_level = get_logging_level_from_env()
+    
+    # Set the log level for the Lambda Powertools logger
+    logger.setLevel(log_level)
+    logger.info(f"Logger level set to: {logging.getLevelName(log_level)}")
 
 
 def get_env_variable(name: str, default: str = None) -> str:
@@ -221,6 +241,9 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
             'filter_unprocessed': True,
             'filter_by_incident_id': True
         }
+        
+        # Configure logger level based on the loaded configuration
+        configure_logger_level(config)
         
         logger.info("Configuration loaded from AWS Secrets Manager")
         

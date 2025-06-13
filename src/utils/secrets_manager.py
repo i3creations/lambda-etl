@@ -215,6 +215,10 @@ def load_config_from_secrets() -> Dict[str, Any]:
                 'client_id': secret_data.get('OPSAPI_OPS_PORTAL_CLIENT_ID'),
                 'client_secret': secret_data.get('OPSAPI_OPS_PORTAL_CLIENT_SECRET'),
                 'verify_ssl': _parse_boolean_value(secret_data.get('OPSAPI_OPS_PORTAL_VERIFY_SSL', 'false'))
+            },
+            'logging': {
+                'level': secret_data.get('OPSAPI_LOGGING_LEVEL', 'INFO'),
+                'file': secret_data.get('OPSAPI_LOGGING_FILE')
             }
         }
         

@@ -143,7 +143,8 @@ def main():
     args = parse_args()
     
     # Set up logging
-    log_level = getattr(logging, args.log_level)
+    # If log level is specified in command line, use it; otherwise, use environment variable
+    log_level = getattr(logging, args.log_level) if args.log_level else None
     logger = setup_logging(log_level=log_level, log_file=args.log_file)
     
     try:
@@ -166,6 +167,9 @@ def main():
                     return self.config_data.get(section, {})
             
             config = SecretsConfig(config_dict)
+            
+            # Update logging configuration with the loaded config
+            logger = setup_logging(log_level=None, log_file=args.log_file, config=config_dict)
         else:
             # Load configuration from files and environment variables (development)
             logger.info("Loading configuration from files and environment variables for development")
@@ -178,6 +182,9 @@ def main():
                 logger.info(f"Loaded environment variables from {env_file}")
             
             config = get_config(args.config)
+            
+            # Update logging configuration with environment variables (now loaded from .env)
+            logger = setup_logging(log_level=None, log_file=args.log_file)
         
         logger.info(f"Configuration loaded successfully for {environment} environment")
         
