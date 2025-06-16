@@ -8,7 +8,7 @@ from MLStripper import strip_tags
 def preprocess(data: str, last_run: datetime) -> pd.DataFrame:
   # Read data into Dataframe.
   df = pd.DataFrame(data)[[
-    'Incidents_Id',
+    'Incident_Id',
     'SIR_',
     'Local_Date_Reported',
     'Facility_Address_HELPER',
@@ -20,7 +20,7 @@ def preprocess(data: str, last_run: datetime) -> pd.DataFrame:
     'Type_of_SIR',
     'Category_Type',
     'Sub_Category_Type'
-  ]].set_index('Incidents_Id')
+  ]].set_index('Incident_Id')
 
   # Filter for valid SIRs that have been processed by the command center since
   # the last run.

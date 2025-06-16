@@ -81,7 +81,7 @@ def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Option
             
             # Check if required columns exist
             required_columns = [
-                'Incidents_Id', 'SIR_', 'Local_Date_Reported',
+                'Incident_Id', 'SIR_', 'Local_Date_Reported',
                 'Facility_Address_HELPER', 'Facility_Latitude', 'Facility_Longitude',
                 'Date_SIR_Processed__NT', 'Details', 'Section_5__Action_Taken',
                 'Type_of_SIR', 'Category_Type', 'Sub_Category_Type'
@@ -93,7 +93,7 @@ def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Option
                 raise ValueError(f"Missing required columns: {missing_columns}")
             
             # Select required columns and set index
-            df = df[required_columns].set_index('Incidents_Id')
+            df = df[required_columns].set_index('Incident_Id')
             
         except Exception as e:
             logger.error(f"Error creating DataFrame: {str(e)}")
@@ -206,7 +206,7 @@ def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Option
         # Drop unnecessary columns (keep type, subtype, sharing from category mapping)
         cols_to_drop = [
             'index', 'Details', 'Section_5__Action_Taken', 'Type_of_SIR',
-            'Category_Type', 'Sub_Category_Type', 'category'
+            'Category_Type', 'Sub_Category_Type', 'category', 'Incident_ID'
         ]
         
         # Only drop columns that actually exist in the dataframe
