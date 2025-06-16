@@ -22,7 +22,7 @@ from src.config import get_config
 from src.archer.auth import get_archer_auth
 from src.processing.preprocess import preprocess
 from src.ops_portal.api import send
-from src.utils.time_utils import get_last_run_time, update_last_run_time, get_current_time
+from src.utils.time_utils import get_last_run_time_from_ssm, update_last_run_time_in_ssm, get_current_time
 from src.utils.secrets_manager import load_config_from_secrets
 from src.utils.logging_utils import get_logging_level_from_env, get_logging_level_from_config
 
@@ -251,6 +251,10 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
         last_incident_id = get_last_incident_id_from_ssm()
         logger.info(f"Last processed incident ID: {last_incident_id}")
         
+        # Get the last run time from SSM Parameter Store
+        last_run_time = get_last_run_time_from_ssm()
+        logger.info(f"Last run time: {last_run_time}")
+        
         # Authenticate with Archer and get SIR data
         archer_config = config['archer']
         archer = get_archer_auth(archer_config)
@@ -308,6 +312,11 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
             if max_incident_id is not None and max_incident_id > last_incident_id:
                 update_last_incident_id_in_ssm(int(max_incident_id))
                 logger.info(f"Updated last processed incident ID to: {max_incident_id}")
+        
+        # Update the last run time in SSM Parameter Store
+        current_time = get_current_time()
+        update_last_run_time_in_ssm(current_time)
+        logger.info(f"Updated last run time to: {current_time}")
         
         logger.info("OPS API Lambda function completed successfully")
         

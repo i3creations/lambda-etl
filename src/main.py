@@ -18,7 +18,7 @@ from .config import get_config
 from .archer.auth import get_archer_auth
 from .processing.preprocess import preprocess
 from .ops_portal.api import send
-from .utils.time_utils import log_time
+from .utils.time_utils import log_time, get_last_run_time_from_ssm, update_last_run_time_in_ssm, get_current_time
 from .utils.logging_utils import setup_logging, get_logger
 from .utils.secrets_manager import load_config_from_secrets
 
@@ -192,6 +192,10 @@ def main():
         last_incident_id = get_last_incident_id_from_ssm()
         logger.info(f"Last processed incident ID: {last_incident_id}")
         
+        # Get the last run time from SSM Parameter Store
+        last_run_time = get_last_run_time_from_ssm()
+        logger.info(f"Last run time: {last_run_time}")
+        
         # Authenticate with Archer and get SIR data
         archer_config = config.get_section('archer')
         archer = get_archer_auth(archer_config)
@@ -234,6 +238,11 @@ def main():
             if max_incident_id is not None and max_incident_id > last_incident_id:
                 update_last_incident_id_in_ssm(int(max_incident_id))
                 logger.info(f"Updated last processed incident ID to: {max_incident_id}")
+        
+        # Update the last run time in SSM Parameter Store
+        current_time = get_current_time()
+        update_last_run_time_in_ssm(current_time)
+        logger.info(f"Updated last run time to: {current_time}")
         
         logger.info("OPS API completed successfully")
         return 0

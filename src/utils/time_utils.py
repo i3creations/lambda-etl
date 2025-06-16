@@ -7,8 +7,10 @@ particularly for logging the last run time of the script.
 
 import os
 import pytz
+import boto3
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 
 def log_time(log_file_path=None) -> datetime:
@@ -159,3 +161,95 @@ def update_last_run_time(log_file_path=None, timestamp=None) -> None:
     # Update the log file
     with open(log_file_path, 'w') as file:
         file.write(timestamp.strftime(fmt))
+
+
+def get_last_run_time_from_ssm() -> datetime:
+    """
+    Get the last run time from AWS Systems Manager Parameter Store.
+    
+    This function retrieves the last run time from the SSM Parameter Store,
+    which is used to track when the Lambda function was last executed.
+    
+    Returns:
+        datetime: Last run time as a datetime object with timezone information,
+                 or current time if parameter doesn't exist or there's an error
+    """
+    try:
+        # Import logger here to avoid circular imports
+        from ..utils.logging_utils import get_logger
+        logger = get_logger('time_utils')
+        
+        ssm = boto3.client('ssm')
+        parameter_name = '/ops-api/last-run-time'
+        
+        try:
+            response = ssm.get_parameter(Name=parameter_name)
+            time_str = response['Parameter']['Value']
+            
+            # Parse the datetime with timezone information
+            last_time = datetime.fromisoformat(time_str)
+            
+            logger.info(f"Retrieved last run time from SSM: {last_time}")
+            return last_time
+            
+        except ssm.exceptions.ParameterNotFound:
+            # Parameter doesn't exist yet, this is normal for first run
+            current_time = get_current_time()
+            logger.info(f"No previous run time found in SSM. Using current US/Eastern time: {current_time}")
+            return current_time
+            
+    except Exception as e:
+        # Import logger here to avoid circular imports
+        from ..utils.logging_utils import get_logger
+        logger = get_logger('time_utils')
+        
+        logger.warning(f"Error getting last run time from SSM: {str(e)}. Using current time.")
+        return get_current_time()
+
+
+def update_last_run_time_in_ssm(timestamp: Optional[datetime] = None) -> None:
+    """
+    Update the last run time in AWS Systems Manager Parameter Store.
+    
+    This function updates the last run time in the SSM Parameter Store,
+    which is used to track when the Lambda function was last executed.
+    
+    Args:
+        timestamp (datetime, optional): Timestamp to save. If None, uses current time.
+    """
+    try:
+        # Import logger here to avoid circular imports
+        from ..utils.logging_utils import get_logger
+        logger = get_logger('time_utils')
+        
+        if timestamp is None:
+            timestamp = get_current_time()
+        elif timestamp.tzinfo is None:
+            # Ensure timestamp has timezone information
+            eastern_tz = pytz.timezone('US/Eastern')
+            timestamp = eastern_tz.localize(timestamp)
+        
+        # Format the timestamp as ISO 8601 string
+        time_str = timestamp.isoformat()
+        
+        # Store in AWS Systems Manager Parameter Store
+        ssm = boto3.client('ssm')
+        parameter_name = '/ops-api/last-run-time'
+        
+        ssm.put_parameter(
+            Name=parameter_name,
+            Value=time_str,
+            Type='String',
+            Overwrite=True,
+            Description='Last run time for OPS API Lambda function in US/Eastern timezone'
+        )
+        
+        logger.info(f"Updated last run time in SSM: {time_str}")
+        
+    except Exception as e:
+        # Import logger here to avoid circular imports
+        from ..utils.logging_utils import get_logger
+        logger = get_logger('time_utils')
+        
+        logger.error(f"Error updating last run time in SSM: {str(e)}")
+        raise
