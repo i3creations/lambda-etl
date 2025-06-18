@@ -59,7 +59,7 @@ class TestIncidentIDIntegration(unittest.TestCase):
             "dry_run": True,  # Use dry run to avoid actually sending data
             "test_data": [
                 {
-                    "Incidents_Id": 1001,
+                    "Incident_ID": 1001,
                     "SIR_": "SIR-1001",
                     "Local_Date_Reported": "2025-06-18T13:30:00Z",
                     "Facility_Address_HELPER": "123 Test St, Test City, TS 12345",
@@ -73,7 +73,7 @@ class TestIncidentIDIntegration(unittest.TestCase):
                     "Sub_Category_Type": "Deportation Order"
                 },
                 {
-                    "Incidents_Id": 1002,
+                    "Incident_ID": 1002,
                     "SIR_": "SIR-1002",
                     "Local_Date_Reported": "2025-06-18T14:30:00Z",
                     "Facility_Address_HELPER": "456 Test Ave, Test City, TS 12345",

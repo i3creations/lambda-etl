@@ -93,7 +93,7 @@ def invoke_lambda_with_test_data(lambda_url=None, test_incident_id=None):
         "dry_run": False,
         "test_data": [
             {
-                "Incidents_Id": test_incident_id,
+                "Incident_ID": test_incident_id,
                 "SIR_": f"SIR-{test_incident_id}",
                 "Local_Date_Reported": "2025-06-18T13:30:00Z",
                 "Facility_Address_HELPER": "123 Test St, Test City, TS 12345",
@@ -180,7 +180,7 @@ class TestIncidentID(unittest.TestCase):
             "dry_run": False,
             "test_data": [
                 {
-                    "Incidents_Id": test_incident_id,
+                    "Incident_ID": test_incident_id,
                     "SIR_": f"SIR-{test_incident_id}",
                     "Local_Date_Reported": "2025-06-18T13:30:00Z",
                     "Facility_Address_HELPER": "123 Test St, Test City, TS 12345",

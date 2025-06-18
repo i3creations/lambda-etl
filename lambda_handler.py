@@ -332,34 +332,20 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
             
             if 'Incident_ID' in processed_data.columns:
                 # Find the highest incident ID from the processed records
-                try:
-                    max_incident_id = processed_data['Incident_ID'].max()
-                    logger.info(f"Max incident ID found: {max_incident_id}, Last incident ID: {last_incident_id}")
-                    
-                    if max_incident_id is not None and max_incident_id > last_incident_id:
-                        try:
-                            update_last_incident_id_in_ssm(int(max_incident_id))
-                            logger.info(f"Successfully updated last processed incident ID to: {max_incident_id}")
-                        except Exception as e:
-                            logger.error(f"Failed to update last incident ID in SSM: {str(e)}")
-                    else:
-                        logger.warning(f"Not updating incident ID: max_incident_id={max_incident_id}, last_incident_id={last_incident_id}")
-                except Exception as e:
-                    logger.error(f"Error processing Incident_ID column: {str(e)}")
-                    # Try to get a sample of the Incident_ID column to debug
+                max_incident_id = processed_data['Incident_ID'].max()
+                logger.info(f"Max incident ID found: {max_incident_id}, Last incident ID: {last_incident_id}")
+                
+                if max_incident_id is not None and max_incident_id > last_incident_id:
                     try:
-                        sample = processed_data['Incident_ID'].head().tolist()
-                        logger.error(f"Sample of Incident_ID values: {sample}")
-                    except Exception as sample_error:
-                        logger.error(f"Could not get sample of Incident_ID values: {str(sample_error)}")
+                        update_last_incident_id_in_ssm(int(max_incident_id))
+                        logger.info(f"Successfully updated last processed incident ID to: {max_incident_id}")
+                    except Exception as e:
+                        logger.error(f"Failed to update last incident ID in SSM: {str(e)}")
+                else:
+                    logger.warning(f"Not updating incident ID: max_incident_id={max_incident_id}, last_incident_id={last_incident_id}")
             else:
                 logger.error("'Incident_ID' column not found in processed data. Available columns: " + 
                              ", ".join(processed_data.columns.tolist()))
-                
-                # Try to recover by looking for similar column names
-                similar_columns = [col for col in processed_data.columns if 'id' in col.lower() or 'incident' in col.lower()]
-                if similar_columns:
-                    logger.warning(f"Found similar columns that might contain incident IDs: {similar_columns}")
         else:
             logger.info("No records processed, not updating incident ID")
         

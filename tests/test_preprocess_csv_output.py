@@ -86,7 +86,7 @@ class TestPreprocessCSVOutput:
         """Prepare valid data records from mock data."""
         valid_data = []
         for record in mock_data:
-            if (record.get('Incidents_Id') and 
+            if (record.get('Incident_ID') and 
                 record.get('SIR_') and 
                 record.get('SIR_') != 'REJECTED' and
                 record.get('Local_Date_Reported') and
@@ -313,7 +313,7 @@ class TestPreprocessCSVOutput:
         
         # Create minimal valid data
         test_data = [{
-            'Incidents_Id': 'INC-001',
+            'Incident_ID': 'INC-001',
             'SIR_': 'BAL-TEST-001',
             'Local_Date_Reported': '2025-01-01T10:00:00Z',
             'Facility_Address_HELPER': '123 Test St',
@@ -432,7 +432,7 @@ class TestPreprocessCSVOutput:
         for i in range(10):  # Create 10x the original data
             for record in valid_data:
                 new_record = record.copy()
-                new_record['Incidents_Id'] = f"{record['Incidents_Id']}_COPY_{i}"
+                new_record['Incident_ID'] = f"{record['Incident_ID']}_COPY_{i}"
                 new_record['SIR_'] = f"{record['SIR_']}_COPY_{i}"
                 large_dataset.append(new_record)
         

@@ -7,7 +7,8 @@ It provides a dictionary that maps source field names to target field names.
 
 # Dictionary mapping OPTS field names to OPS Portal field names
 field_names = {
-    'Incidents_Id': 'Incident_ID',  # Map Incidents_Id to Incident_ID
+    'Incident_ID': 'Incident_ID',  # Keep Incident_ID as is
+    'Incidents_Id': 'Incident_ID',  # Map Incidents_Id to Incident_ID (for backward compatibility)
     'SIR_': 'tenantItemID',
     'Local_Date_Reported': 'openDate',
     'Facility_Address_HELPER': 'location',
