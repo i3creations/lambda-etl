@@ -123,11 +123,20 @@ def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Option
         else:
             logger.info("No records filtered")
         
+        # Log each record's Incident ID that is being processed
+        logger.info(f"Processing records with the following Incident IDs: {df.index.tolist()}")
+        
         # Explode columns with multiple values
         cols_to_explode = ['Type_of_SIR', 'Category_Type', 'Sub_Category_Type']
         
+        # Log before exploding to track original record count
+        logger.info(f"Before exploding columns, record count: {len(df)}")
+        
         for col in cols_to_explode:
             df = df.explode(col)
+            
+        # Log after exploding to see if record count changed
+        logger.info(f"After exploding columns, record count: {len(df)}")
         
         # Map Category/Type/Subtype to OPS Category/Type/Subtype/Sharing Level
         try:
@@ -173,27 +182,40 @@ def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Option
                 logger.warning(f"Merge changed row count from {original_count} to {merged_count}")
                 
                 # If we have duplicates due to the merge, we need to handle them
-                if merged_count > original_count and 'index' in df.columns:
+                if merged_count > original_count and 'Incident_ID' in df.columns:
                     logger.warning("Merge created duplicate rows. Keeping only the first occurrence of each incident ID.")
                     try:
                         # Keep only the first occurrence of each incident ID
-                        df = df.drop_duplicates(subset=['index'])
+                        df = df.drop_duplicates(subset=['Incident_ID'])
                         logger.info(f"After removing duplicates: {len(df)} rows")
                     except KeyError as e:
                         logger.error(f"Error dropping duplicates: {str(e)}")
                         logger.error(f"Available columns: {df.columns.tolist()}")
             
             # Ensure we have the original incident IDs
-            if 'index' in df.columns:
-                logger.info("Found 'index' column after merge")
+            if 'Incident_ID' in df.columns:
+                logger.info("Found 'Incident_ID' column after merge")
                 # Set the index back to Incident_ID
-                df = df.set_index('index')
+                df = df.set_index('Incident_ID')
                 logger.info("Reset index to Incident_ID after merge")
             else:
-                logger.warning("'index' column not found after merge")
+                logger.warning("'Incident_ID' column not found after merge")
                 logger.warning(f"Available columns: {df.columns.tolist()}")
             
             logger.info(f"Mapped categories: {merged_count} records matched, {original_count - merged_count} records dropped")
+            
+            # Log each record's Incident ID after category mapping
+            if 'Incident_ID' in df.columns:
+                for _, row in df.iterrows():
+                    incident_id = row['Incident_ID']
+                    sir_id = row.get('SIR_', 'N/A')
+                    sir_type = row.get('Type_of_SIR', 'N/A')
+                    logger.info(f"Processing record - Incident ID: {incident_id}, SIR ID: {sir_id}, Type: {sir_type}")
+            elif df.index.name == 'Incident_ID':
+                for incident_id, row in df.iterrows():
+                    sir_id = row.get('SIR_', 'N/A')
+                    sir_type = row.get('Type_of_SIR', 'N/A')
+                    logger.info(f"Processing record - Incident ID: {incident_id}, SIR ID: {sir_id}, Type: {sir_type}")
             
         except Exception as e:
             logger.error(f"Error mapping categories: {str(e)}")
@@ -230,21 +252,35 @@ def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Option
             logger.debug(f"Converting {col} to string")
             df[col] = df[col].astype(str)
         
-        # Reset index to make Incident_ID a regular column if it's not already
-        if df.index.name == 'index' or df.index.name is None:
-            logger.info("Resetting index to make Incident_ID a regular column")
-            df = df.reset_index()
+        # Store the current index name before resetting
+        current_index_name = df.index.name
+        logger.info(f"Current index name before reset: {current_index_name}")
         
-        # Ensure we have the index column after resetting
-        if 'index' not in df.columns:
-            logger.error("Index column not found after resetting index!")
-            logger.error(f"Available columns: {df.columns.tolist()}")
+        # Ensure the index has a name before resetting it
+        if current_index_name is None:
+            logger.info("Index has no name, setting it to 'Incident_ID'")
+            df.index.name = 'Incident_ID'
+            current_index_name = 'Incident_ID'
+        
+        # Reset index to make the index a regular column
+        df = df.reset_index()
+        
+        # After reset_index(), the index becomes a column with the name that was stored in index.name
+        logger.info(f"Available columns after reset: {df.columns.tolist()}")
+        
+        # Check if we have the Incident_ID column after resetting
+        if 'Incident_ID' in df.columns:
+            logger.info("Incident_ID column found after resetting index")
+        elif current_index_name in df.columns:
+            # If the index column was created with a different name, rename it
+            logger.info(f"Found index column with name: {current_index_name}, renaming to Incident_ID")
+            df['Incident_ID'] = df[current_index_name]
         else:
-            logger.info("Index column found after resetting index")
-            # Rename the index column to Incident_ID if it's not already there
-            if 'Incident_ID' not in df.columns:
-                df['Incident_ID'] = df['index']
-                logger.info("Created Incident_ID column from index")
+            # If we still don't have an Incident_ID column, log an error and create one from the index
+            logger.error("Incident_ID column not found after resetting index!")
+            logger.error(f"Available columns: {df.columns.tolist()}")
+            logger.warning("Creating Incident_ID column from current index")
+            df['Incident_ID'] = df.index
         
         # Rename columns according to field mapping
         logger.info("Renaming columns according to field mapping")
@@ -274,7 +310,7 @@ def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Option
         # Drop unnecessary columns (keep type, subtype, sharing from category mapping)
         cols_to_drop = [
             'Details', 'Section_5__Action_Taken', 'Type_of_SIR',
-            'Category_Type', 'Sub_Category_Type', 'category', 'index'
+            'Category_Type', 'Sub_Category_Type', 'category'
             # Removed 'Incident_ID' from columns to drop to preserve it for SSM parameter update
         ]
         
@@ -300,6 +336,10 @@ def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Option
             logger.warning("Creating Incident_ID column as a last resort")
             df['Incident_ID'] = df.index
             logger.info(f"Created Incident_ID column from index. New columns: {df.columns.tolist()}")
+        
+        # Log the final list of Incident IDs that are ready for submission
+        if 'Incident_ID' in df.columns:
+            logger.info(f"Final Incident IDs ready for submission: {df['Incident_ID'].tolist()}")
         
         logger.info(f"Preprocessing complete: {len(df)} records ready for submission")
         return df
