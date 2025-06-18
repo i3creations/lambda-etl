@@ -131,6 +131,12 @@ function create_ssm_parameters() {
     # Time log parameter (initialize with current time)
     aws ${AWS_COMMON_ARGS} ssm put-parameter --name "/ops-api/time-log" --value "$(date -u +"%Y-%m-%dT%H:%M:%S.%3NZ")" --type String --overwrite
     
+    # Last incident ID parameter (initialize with 0)
+    aws ${AWS_COMMON_ARGS} ssm put-parameter --name "/ops-api/last-incident-id" --value "0" --type String --overwrite
+    
+    # Last run time parameter (initialize with current time)
+    aws ${AWS_COMMON_ARGS} ssm put-parameter --name "/ops-api/last-run-time" --value "$(date -u +"%Y-%m-%dT%H:%M:%S.%3NZ")" --type String --overwrite
+    
     info "SSM parameters created."
 }
 

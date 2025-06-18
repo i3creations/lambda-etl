@@ -163,7 +163,15 @@ def get_last_incident_id_from_ssm() -> int:
         int: Last processed incident ID, or 0 if none found
     """
     try:
-        ssm = boto3.client('ssm')
+        # Get endpoint URL from environment variable if running locally
+        endpoint_url = os.environ.get('AWS_ENDPOINT_URL')
+        
+        # Create SSM client with endpoint URL if provided
+        if endpoint_url:
+            ssm = boto3.client('ssm', endpoint_url=endpoint_url)
+        else:
+            ssm = boto3.client('ssm')
+            
         parameter_name = '/ops-api/last-incident-id'
         
         try:
@@ -194,8 +202,15 @@ def update_last_incident_id_in_ssm(incident_id: int) -> None:
         incident_id (int): Incident ID to save
     """
     try:
-        # Store in AWS Systems Manager Parameter Store
-        ssm = boto3.client('ssm')
+        # Get endpoint URL from environment variable if running locally
+        endpoint_url = os.environ.get('AWS_ENDPOINT_URL')
+        
+        # Create SSM client with endpoint URL if provided
+        if endpoint_url:
+            ssm = boto3.client('ssm', endpoint_url=endpoint_url)
+        else:
+            ssm = boto3.client('ssm')
+            
         parameter_name = '/ops-api/last-incident-id'
         
         ssm.put_parameter(
@@ -255,12 +270,18 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
         last_run_time = get_last_run_time_from_ssm()
         logger.info(f"Last run time: {last_run_time}")
         
-        # Authenticate with Archer and get SIR data
-        archer_config = config['archer']
-        archer = get_archer_auth(archer_config)
-        
-        logger.info("Retrieving SIR data from Archer")
-        raw_data = archer.get_sir_data(since_incident_id=last_incident_id)
+        # Check if test data is provided in the event
+        if 'test_data' in event:
+            logger.info("Using test data provided in the event")
+            raw_data = event['test_data']
+        else:
+            # Authenticate with Archer and get SIR data
+            archer_config = config['archer']
+            archer = get_archer_auth(archer_config)
+            
+            logger.info("Retrieving SIR data from Archer")
+            raw_data = archer.get_sir_data(since_incident_id=last_incident_id)
+            
         logger.info(f"Retrieved {len(raw_data)} records from Archer")
         
         # Preprocess the data
@@ -306,12 +327,41 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
             logger.info("No records to send")
         
         # Update the last processed incident ID if we processed any records
-        if not processed_data.empty and 'Incident_ID' in processed_data.columns:
-            # Find the highest incident ID from the processed records
-            max_incident_id = processed_data['Incident_ID'].max()
-            if max_incident_id is not None and max_incident_id > last_incident_id:
-                update_last_incident_id_in_ssm(int(max_incident_id))
-                logger.info(f"Updated last processed incident ID to: {max_incident_id}")
+        if not processed_data.empty:
+            logger.info(f"Processed data columns: {processed_data.columns.tolist()}")
+            
+            if 'Incident_ID' in processed_data.columns:
+                # Find the highest incident ID from the processed records
+                try:
+                    max_incident_id = processed_data['Incident_ID'].max()
+                    logger.info(f"Max incident ID found: {max_incident_id}, Last incident ID: {last_incident_id}")
+                    
+                    if max_incident_id is not None and max_incident_id > last_incident_id:
+                        try:
+                            update_last_incident_id_in_ssm(int(max_incident_id))
+                            logger.info(f"Successfully updated last processed incident ID to: {max_incident_id}")
+                        except Exception as e:
+                            logger.error(f"Failed to update last incident ID in SSM: {str(e)}")
+                    else:
+                        logger.warning(f"Not updating incident ID: max_incident_id={max_incident_id}, last_incident_id={last_incident_id}")
+                except Exception as e:
+                    logger.error(f"Error processing Incident_ID column: {str(e)}")
+                    # Try to get a sample of the Incident_ID column to debug
+                    try:
+                        sample = processed_data['Incident_ID'].head().tolist()
+                        logger.error(f"Sample of Incident_ID values: {sample}")
+                    except Exception as sample_error:
+                        logger.error(f"Could not get sample of Incident_ID values: {str(sample_error)}")
+            else:
+                logger.error("'Incident_ID' column not found in processed data. Available columns: " + 
+                             ", ".join(processed_data.columns.tolist()))
+                
+                # Try to recover by looking for similar column names
+                similar_columns = [col for col in processed_data.columns if 'id' in col.lower() or 'incident' in col.lower()]
+                if similar_columns:
+                    logger.warning(f"Found similar columns that might contain incident IDs: {similar_columns}")
+        else:
+            logger.info("No records processed, not updating incident ID")
         
         # Update the last run time in SSM Parameter Store
         current_time = get_current_time()

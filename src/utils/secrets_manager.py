@@ -32,12 +32,26 @@ class SecretsManager:
         """
         self.region_name = region_name or os.environ.get('AWS_DEFAULT_REGION', 'us-east-1')
         
+        # Get endpoint URL from environment variable if running locally
+        endpoint_url = os.environ.get('AWS_ENDPOINT_URL')
+        
         # Create a Secrets Manager client
         session = boto3.session.Session()
-        self.client = session.client(
-            service_name='secretsmanager',
-            region_name=self.region_name
-        )
+        
+        # Create client with endpoint URL if provided
+        if endpoint_url:
+            self.client = session.client(
+                service_name='secretsmanager',
+                region_name=self.region_name,
+                endpoint_url=endpoint_url
+            )
+            logger.info(f"Initialized Secrets Manager client for region: {self.region_name} with endpoint URL: {endpoint_url}")
+        else:
+            self.client = session.client(
+                service_name='secretsmanager',
+                region_name=self.region_name
+            )
+            logger.info(f"Initialized Secrets Manager client for region: {self.region_name}")
         
         logger.info(f"Initialized Secrets Manager client for region: {self.region_name}")
     

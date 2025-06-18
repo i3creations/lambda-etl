@@ -152,15 +152,46 @@ def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Option
             logger.debug(f"Data types before merge - df: {df[merge_columns].dtypes.to_dict()}")
             logger.debug(f"Data types before merge - category_map: {category_map[merge_columns].dtypes.to_dict()}")
             
+            # Create a temporary column with the original incident ID
+            df['original_incident_id'] = df.index
+            
+            # Reset index to make Incidents_Id a regular column
+            df_reset = df.reset_index()
+            
             # Merge with category mappings
             original_count = len(df)
             df = pd.merge(
-                df,
+                df_reset,
                 category_map,
                 on=merge_columns,
                 how='inner'
             )
             merged_count = len(df)
+            
+            # If the merge resulted in a different number of rows, we need to adjust
+            if merged_count != original_count:
+                logger.warning(f"Merge changed row count from {original_count} to {merged_count}")
+                
+                # If we have duplicates due to the merge, we need to handle them
+                if merged_count > original_count and 'index' in df.columns:
+                    logger.warning("Merge created duplicate rows. Keeping only the first occurrence of each incident ID.")
+                    try:
+                        # Keep only the first occurrence of each incident ID
+                        df = df.drop_duplicates(subset=['index'])
+                        logger.info(f"After removing duplicates: {len(df)} rows")
+                    except KeyError as e:
+                        logger.error(f"Error dropping duplicates: {str(e)}")
+                        logger.error(f"Available columns: {df.columns.tolist()}")
+            
+            # Ensure we have the original incident IDs
+            if 'index' in df.columns:
+                logger.info("Found 'index' column after merge")
+                # Set the index back to Incidents_Id
+                df = df.set_index('index')
+                logger.info("Reset index to Incidents_Id after merge")
+            else:
+                logger.warning("'index' column not found after merge")
+                logger.warning(f"Available columns: {df.columns.tolist()}")
             
             logger.info(f"Mapped categories: {merged_count} records matched, {original_count - merged_count} records dropped")
             
@@ -199,15 +230,62 @@ def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Option
             logger.debug(f"Converting {col} to string")
             df[col] = df[col].astype(str)
         
+        # Reset index to make Incidents_Id a regular column if it's not already
+        if df.index.name == 'index' or df.index.name is None:
+            logger.info("Resetting index to make Incidents_Id a regular column")
+            df = df.reset_index()
+        
+        # Ensure we have the index column after resetting
+        if 'index' not in df.columns:
+            logger.error("Index column not found after resetting index!")
+            logger.error(f"Available columns: {df.columns.tolist()}")
+        else:
+            logger.info("Index column found after resetting index")
+            # Rename the index column to Incidents_Id if it's not already there
+            if 'Incidents_Id' not in df.columns:
+                df['Incidents_Id'] = df['index']
+                logger.info("Created Incidents_Id column from index")
+        
         # Rename columns according to field mapping
         logger.info("Renaming columns according to field mapping")
-        df = df.reset_index().rename(columns=field_names).replace({np.nan: None})
+        df = df.rename(columns=field_names).replace({np.nan: None})
+        
+        # Ensure Incident_ID column exists and is preserved
+        if 'Incident_ID' not in df.columns:
+            logger.warning("Incident_ID column not found after renaming. Creating it explicitly.")
+            
+            # Try to create it from original_incident_id first (most accurate)
+            if 'original_incident_id' in df.columns:
+                df['Incident_ID'] = df['original_incident_id']
+                logger.info("Created Incident_ID column from original_incident_id")
+            # Otherwise try from Incidents_Id
+            elif 'Incidents_Id' in df.columns:
+                df['Incident_ID'] = df['Incidents_Id']
+                logger.info("Created Incident_ID column from Incidents_Id")
+            # Last resort, use index
+            else:
+                logger.warning("No source column found for Incident_ID, using current index")
+                df['Incident_ID'] = df.index
+        
+        # Log the columns to verify Incident_ID is present
+        logger.info(f"Columns after renaming: {df.columns.tolist()}")
         
         # Drop unnecessary columns (keep type, subtype, sharing from category mapping)
         cols_to_drop = [
-            'index', 'Details', 'Section_5__Action_Taken', 'Type_of_SIR',
-            'Category_Type', 'Sub_Category_Type', 'category', 'Incident_ID'
+            'Details', 'Section_5__Action_Taken', 'Type_of_SIR',
+            'Category_Type', 'Sub_Category_Type', 'category', 'index'
+            # Removed 'Incident_ID' from columns to drop to preserve it for SSM parameter update
         ]
+        
+        # Also drop temporary columns used for tracking incident IDs
+        if 'original_incident_id' in df.columns and 'Incident_ID' in df.columns:
+            cols_to_drop.append('original_incident_id')
+            logger.info("Adding original_incident_id to columns to drop since Incident_ID exists")
+        
+        # Also drop 'Incidents_Id' if it exists alongside 'Incident_ID' to avoid duplication
+        if 'Incidents_Id' in df.columns and 'Incident_ID' in df.columns:
+            cols_to_drop.append('Incidents_Id')
+            logger.info("Adding Incidents_Id to columns to drop since Incident_ID exists")
         
         # Only drop columns that actually exist in the dataframe
         cols_to_drop = [col for col in cols_to_drop if col in df.columns]
@@ -215,6 +293,17 @@ def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Option
         logger.info(f"Dropping unnecessary columns: {cols_to_drop}")
         if cols_to_drop:
             df = df.drop(cols_to_drop, axis=1)
+        
+        # Final verification that Incident_ID exists
+        if 'Incident_ID' not in df.columns:
+            logger.error("Incident_ID column is missing after all processing steps!")
+            logger.error(f"Available columns: {df.columns.tolist()}")
+            
+            # As a last resort, create the Incident_ID column from the index
+            # This is a fallback mechanism to ensure the column exists
+            logger.warning("Creating Incident_ID column as a last resort")
+            df['Incident_ID'] = df.index
+            logger.info(f"Created Incident_ID column from index. New columns: {df.columns.tolist()}")
         
         logger.info(f"Preprocessing complete: {len(df)} records ready for submission")
         return df

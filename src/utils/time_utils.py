@@ -179,7 +179,15 @@ def get_last_run_time_from_ssm() -> datetime:
         from ..utils.logging_utils import get_logger
         logger = get_logger('time_utils')
         
-        ssm = boto3.client('ssm')
+        # Get endpoint URL from environment variable if running locally
+        endpoint_url = os.environ.get('AWS_ENDPOINT_URL')
+        
+        # Create SSM client with endpoint URL if provided
+        if endpoint_url:
+            ssm = boto3.client('ssm', endpoint_url=endpoint_url)
+        else:
+            ssm = boto3.client('ssm')
+            
         parameter_name = '/ops-api/last-run-time'
         
         try:
@@ -232,8 +240,15 @@ def update_last_run_time_in_ssm(timestamp: Optional[datetime] = None) -> None:
         # Format the timestamp as ISO 8601 string
         time_str = timestamp.isoformat()
         
-        # Store in AWS Systems Manager Parameter Store
-        ssm = boto3.client('ssm')
+        # Get endpoint URL from environment variable if running locally
+        endpoint_url = os.environ.get('AWS_ENDPOINT_URL')
+        
+        # Create SSM client with endpoint URL if provided
+        if endpoint_url:
+            ssm = boto3.client('ssm', endpoint_url=endpoint_url)
+        else:
+            ssm = boto3.client('ssm')
+            
         parameter_name = '/ops-api/last-run-time'
         
         ssm.put_parameter(
