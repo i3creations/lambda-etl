@@ -177,6 +177,11 @@ def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Option
             )
             merged_count = len(df)
             
+            # Ensure Incident_ID exists after merge
+            if 'Incident_ID' not in df.columns and 'original_incident_id' in df.columns:
+                logger.info("Restoring 'Incident_ID' from 'original_incident_id' after merge")
+                df['Incident_ID'] = df['original_incident_id']
+            
             # If the merge resulted in a different number of rows, we need to adjust
             if merged_count != original_count:
                 logger.warning(f"Merge changed row count from {original_count} to {merged_count}")
