@@ -18,6 +18,7 @@ from .field_mapping import field_names
 from .default_fields import default_fields
 from .html_stripper import strip_tags
 from ..utils.logging_utils import get_logger
+from ..utils.time_utils import format_datetime_for_api
 
 # Get logger for this module
 logger = get_logger('processing.preprocess')
@@ -262,42 +263,33 @@ def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Option
         for key, value in default_fields.items():
             df[key] = value
         
-        # Format datetime columns - convert to UTC with Z suffix as per swagger spec
+        # Format datetime columns using the time_utils function
         cols_to_format = ['Local_Date_Reported', 'Date_SIR_Processed__NT']
 
         for col in cols_to_format:
             logger.debug(f"Formatting datetime column: {col}")
-            # Convert to datetime, ensure timezone info, convert to UTC, then format with Z suffix
-            dt_series = pd.to_datetime(df[col])
+            # Convert to datetime and format using our utility function
+            # Explicitly parse ISO 8601 strings with timezone info
+            dt_series = pd.to_datetime(df[col], utc=True)
             
-            # Check if the datetime has timezone info, if not, localize to US/Eastern
-            if dt_series.dt.tz is None:
-                logger.debug(f"Localizing {col} to US/Eastern timezone")
-                import pytz
-                eastern_tz = pytz.timezone('US/Eastern')
-                dt_series = dt_series.dt.tz_localize(eastern_tz)
+            # Log the original and parsed values for debugging
+            if not df[col].empty:
+                sample_original = df[col].iloc[0]
+                sample_parsed = dt_series.iloc[0]
+                logger.debug(f"Sample {col} original value: {sample_original}")
+                logger.debug(f"Sample {col} parsed value: {sample_parsed}")
             
-            # Convert to UTC and format with Z suffix
-            df[col] = dt_series.dt.tz_convert('UTC').dt.strftime('%Y-%m-%dT%H:%M:%S.%f').str[:-3] + 'Z'
+            df[col] = format_datetime_for_api(dt_series, col)
         
-        # Format default datetime fields if they are not None
-        default_datetime_fields = ['scheduledDate', 'mediaReportDate', 'officialReportDate', 'publishDate']
+        # Format default datetime fields using the time_utils function
+        default_datetime_fields = ['scheduledDate', 'mediaReportDate', 'officialReportDate', 'publishDate', 'openDate']
         
         for field in default_datetime_fields:
             if field in df.columns and df[field].notna().any():
                 logger.debug(f"Formatting default datetime field: {field}")
-                # Convert to datetime, ensure timezone info, convert to UTC, then format with Z suffix
+                # Convert to datetime and format using our utility function
                 dt_series = pd.to_datetime(df[field])
-                
-                # Check if the datetime has timezone info, if not, localize to US/Eastern
-                if dt_series.dt.tz is None:
-                    logger.debug(f"Localizing {field} to US/Eastern timezone")
-                    import pytz
-                    eastern_tz = pytz.timezone('US/Eastern')
-                    dt_series = dt_series.dt.tz_localize(eastern_tz)
-                
-                # Convert to UTC and format with Z suffix
-                df[field] = dt_series.dt.tz_convert('UTC').dt.strftime('%Y-%m-%dT%H:%M:%S.%f').str[:-3] + 'Z'
+                df[field] = format_datetime_for_api(dt_series, field)
         
         # Convert numeric columns to string
         cols_to_convert = ['Facility_Latitude', 'Facility_Longitude']
@@ -394,6 +386,38 @@ def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Option
         # Log the final list of Incident IDs that are ready for submission
         if 'Incident_ID' in df.columns:
             logger.info(f"Final Incident IDs ready for submission: {df['Incident_ID'].tolist()}")
+        
+        # Post-processing step to ensure openDate is properly set and add the required item field
+        logger.info("Post-processing: Ensuring openDate is properly set and adding required item field")
+        
+        # Check if openDate is null and fix it using Local_Date_Reported
+        if 'openDate' in df.columns:
+            null_count = df['openDate'].isnull().sum()
+            if null_count > 0:
+                logger.warning(f"Found {null_count} records with null openDate values")
+                
+                # Check if we still have the original Local_Date_Reported column
+                if 'Local_Date_Reported' in df.columns:
+                    logger.info("Fixing null openDate values using Local_Date_Reported")
+                    # Format Local_Date_Reported and use it to set openDate for null values
+                    mask = df['openDate'].isnull()
+                    dt_series = pd.to_datetime(df.loc[mask, 'Local_Date_Reported'], utc=True)
+                    df.loc[mask, 'openDate'] = format_datetime_for_api(dt_series, 'Local_Date_Reported')
+                    
+                    # Verify fix
+                    null_count_after = df['openDate'].isnull().sum()
+                    logger.info(f"After fix: {null_count_after} records still have null openDate values")
+        else:
+            logger.warning("openDate column not found in the processed data")
+        
+        # Log sample values for debugging
+        if not df.empty:
+            sample_row = df.iloc[0].to_dict()
+            logger.debug(f"Sample record after post-processing: {sample_row}")
+            
+            # Specifically log openDate and item values
+            logger.info(f"Sample openDate: {sample_row.get('openDate', 'Not found')}")
+            logger.info(f"Sample item: {sample_row.get('item', 'Not found')}")
         
         logger.info(f"Preprocessing complete: {len(df)} records ready for submission")
         return df

@@ -8,9 +8,10 @@ particularly for logging the last run time of the script.
 import os
 import pytz
 import boto3
+import pandas as pd
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 
 def log_time(log_file_path=None) -> datetime:
@@ -46,7 +47,7 @@ def log_time(log_file_path=None) -> datetime:
     fmt = '%Y-%m-%dT%H:%M:%S%z'
     
     # Get current time
-    current_time = tz.localize(datetime.now())
+    current_time = datetime.now(pytz.UTC).astimezone(tz)
     
     try:
         # Read previous time and update the log file
@@ -75,7 +76,7 @@ def get_current_time(timezone_str='US/Eastern') -> datetime:
         datetime: Current time as a datetime object with timezone information
     """
     tz = pytz.timezone(timezone_str)
-    return tz.localize(datetime.now())
+    return datetime.now(pytz.UTC).astimezone(tz)
 
 
 def format_datetime(dt, fmt='%Y-%m-%dT%H:%M:%S%z') -> str:
@@ -115,7 +116,7 @@ def get_last_run_time(log_file_path=None) -> datetime:
     fmt = '%Y-%m-%dT%H:%M:%S%z'
     
     # Get current time as fallback
-    current_time = tz.localize(datetime.now())
+    current_time = datetime.now(pytz.UTC).astimezone(tz)
     
     try:
         # Read previous time from the log file
@@ -154,7 +155,7 @@ def update_last_run_time(log_file_path=None, timestamp=None) -> None:
     
     # Get current time if timestamp not provided
     if timestamp is None:
-        timestamp = tz.localize(datetime.now())
+        timestamp = datetime.now(pytz.UTC).astimezone(tz)
     elif timestamp.tzinfo is None:
         timestamp = tz.localize(timestamp)
     
@@ -268,3 +269,115 @@ def update_last_run_time_in_ssm(timestamp: Optional[datetime] = None) -> None:
         
         logger.error(f"Error updating last run time in SSM: {str(e)}")
         raise
+
+
+def ensure_valid_datetime(dt_series: Union[pd.Series, datetime], field_name: str = "datetime") -> Union[pd.Series, datetime]:
+    """
+    Ensure datetime values are valid.
+    
+    This function checks if datetime values are on future days compared to the current time
+    in Eastern timezone, and raises an exception if they are. Dates on the same day are allowed
+    even if they are later in the day.
+    
+    Args:
+        dt_series (Union[pd.Series, datetime]): Pandas Series of datetime values or a single datetime
+        field_name (str, optional): Name of the field being processed, for logging purposes
+        
+    Returns:
+        Union[pd.Series, datetime]: Processed datetime values
+        
+    Raises:
+        ValueError: If any datetime value is on a future day
+    """
+    # Import logger here to avoid circular imports
+    from ..utils.logging_utils import get_logger
+    logger = get_logger('time_utils')
+    
+    # Get current time in Eastern timezone for comparison
+    eastern_tz = pytz.timezone('US/Eastern')
+    current_time_eastern = datetime.now(pytz.UTC).astimezone(eastern_tz)
+    current_date_eastern = current_time_eastern.date()
+    logger.debug(f"Current time in Eastern timezone: {current_time_eastern.isoformat()}")
+    logger.debug(f"Current date in Eastern timezone: {current_date_eastern}")
+    
+    # Handle single datetime object
+    if isinstance(dt_series, datetime):
+        # Ensure timezone info
+        if dt_series.tzinfo is None:
+            dt_series = eastern_tz.localize(dt_series)
+        
+        # Log the datetime for debugging
+        logger.debug(f"Checking {field_name} datetime: {dt_series.isoformat()}")
+        
+        # Check if date is on a future day (not just later in the same day)
+        dt_date = dt_series.date()
+        if dt_date > current_date_eastern:
+            error_msg = f"{field_name} date ({dt_series.isoformat()}) is on a future day compared to current date ({current_date_eastern})"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        return dt_series
+    
+    # Handle pandas Series
+    else:
+        # Ensure timezone info
+        if dt_series.dt.tz is None:
+            logger.debug(f"Localizing {field_name} to US/Eastern timezone")
+            dt_series = dt_series.dt.tz_localize(eastern_tz)
+        
+        # Log a sample datetime for debugging
+        if not dt_series.empty:
+            sample_dt = dt_series.iloc[0]
+            logger.debug(f"Sample {field_name} datetime: {sample_dt}")
+        
+        # Extract just the date part for comparison
+        dt_dates = dt_series.dt.date
+        
+        # Check for future dates (dates on future days)
+        future_dates = dt_dates > current_date_eastern
+        if future_dates.any():
+            # Get the first future date for the error message
+            future_date_example = dt_series[future_dates].iloc[0].isoformat() if future_dates.any() else "unknown"
+            error_msg = f"Found {future_dates.sum()} future dates in {field_name}. Example: {future_date_example} is on a future day compared to current date ({current_date_eastern})"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+            
+        return dt_series
+
+
+def format_datetime_for_api(dt_series: Union[pd.Series, datetime], field_name: str = "datetime") -> Union[pd.Series, str]:
+    """
+    Format datetime values for API submission.
+    
+    This function ensures datetime values are valid (not in the future),
+    converts them to UTC, and formats them with Z suffix as per swagger spec.
+    
+    Args:
+        dt_series (Union[pd.Series, datetime]): Pandas Series of datetime values or a single datetime
+        field_name (str, optional): Name of the field being processed, for logging purposes
+        
+    Returns:
+        Union[pd.Series, str]: Formatted datetime values
+        
+    Raises:
+        ValueError: If any datetime value is in the future
+    """
+    # Import logger here to avoid circular imports
+    from ..utils.logging_utils import get_logger
+    logger = get_logger('time_utils')
+    
+    # Ensure valid datetime (not in the future)
+    dt_series = ensure_valid_datetime(dt_series, field_name)
+    
+    # Handle single datetime object
+    if isinstance(dt_series, datetime):
+        # Convert to UTC and format with fixed milliseconds and Z suffix
+        formatted = dt_series.astimezone(pytz.UTC).strftime('%Y-%m-%dT%H:%M:%S.000Z')
+        logger.debug(f"Formatted {field_name} date: {formatted}")
+        return formatted
+    
+    # Handle pandas Series
+    else:
+        # Convert to UTC and format with fixed milliseconds and Z suffix
+        formatted = dt_series.dt.tz_convert('UTC').dt.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+        logger.debug(f"Formatted {field_name} dates: {len(formatted)} values")
+        return formatted

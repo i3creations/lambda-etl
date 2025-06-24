@@ -27,6 +27,7 @@ default_fields = {
     'officialReportDate': None,
     'tenantAbbreviation': 'USCIS',
     'publishDate': None,
+    'openDate': None,
     'approvedBy': 'Command Center Group'
 }
 
