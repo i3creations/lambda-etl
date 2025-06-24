@@ -15,7 +15,7 @@ def test_data_structure_matches_swagger():
     # Sample input data that matches what would come from Archer
     sample_data = [
         {
-            'Incidents_Id': 'INC-001',
+            'Incident_ID': 'INC-001',
             'SIR_': 'SIR-2025-001',
             'Local_Date_Reported': '2025-05-31T10:00:00Z',
             'Facility_Address_HELPER': '123 Main St, Washington, DC',
@@ -31,7 +31,7 @@ def test_data_structure_matches_swagger():
     ]
     
     # Process the data
-    last_run = datetime(2025, 6, 1)
+    last_incident_id = ""  # Empty string to include all incident IDs
     config = {
         'category_mapping_file': 'config/category_mappings.csv',
         'filter_rejected': False,
@@ -39,7 +39,7 @@ def test_data_structure_matches_swagger():
         'filter_by_date': False
     }
     
-    processed_df = preprocess(sample_data, last_run, config)
+    processed_df = preprocess(sample_data, last_incident_id, config)
     
     # Convert to records for API sending
     if not processed_df.empty:
@@ -85,9 +85,12 @@ def test_data_structure_matches_swagger():
         assert isinstance(record['intlThreatsIncidents'], bool), "intlThreatsIncidents should be boolean"
         assert isinstance(record['terrorismRelated'], bool), "terrorismRelated should be boolean"
         
-        # Check datetime format (should be ISO format with Z suffix)
-        assert record['openDate'].endswith('Z'), "openDate should end with Z"
-        assert record['swoDate'].endswith('Z'), "swoDate should end with Z"
+        # Check datetime format (should be ISO format with timezone offset)
+        import re
+        # Pattern to match ISO datetime with timezone offset (e.g., +0000, -0500)
+        tz_pattern = r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+[+-]\d{4}$'
+        assert re.match(tz_pattern, record['openDate']), f"openDate should have timezone offset format: {record['openDate']}"
+        assert re.match(tz_pattern, record['swoDate']), f"swoDate should have timezone offset format: {record['swoDate']}"
         
         # Verify specific values from category mapping
         assert record['type'] == 'Suspicious Incident', f"Expected 'Suspicious Incident', got '{record['type']}'"

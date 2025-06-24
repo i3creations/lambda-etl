@@ -128,7 +128,7 @@ class TestPreprocessCSVOutput:
             pytest.skip("No valid data found in mock data for testing")
         
         # Configure preprocessing
-        last_run = datetime(2025, 7, 1, tzinfo=timezone.utc)
+        last_incident_id = ""  # Empty string to include all incident IDs
         config = {
             'category_mapping_file': category_mapping_file,
             'filter_rejected': True,
@@ -137,7 +137,7 @@ class TestPreprocessCSVOutput:
         }
         
         # Run preprocessing
-        result = preprocess(valid_data, last_run, config)
+        result = preprocess(valid_data, last_incident_id, config)
         
         # Verify result
         assert isinstance(result, pd.DataFrame)
@@ -178,7 +178,7 @@ class TestPreprocessCSVOutput:
             pytest.skip("No valid data found in mock data for testing")
         
         # Configure preprocessing with minimal filtering
-        last_run = datetime(2025, 7, 1, tzinfo=timezone.utc)
+        last_incident_id = ""  # Empty string to include all incident IDs
         config = {
             'category_mapping_file': category_mapping_file,
             'filter_rejected': True,
@@ -215,9 +215,12 @@ class TestPreprocessCSVOutput:
         assert len(html_records) == 0, "No HTML tags should remain in processed data"
         
         # Validate date formatting
+        import re
+        tz_pattern = r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+[+-]\d{4}$'
         for _, row in saved_df.iterrows():
             open_date = row['openDate']
-            assert 'T' in open_date and 'Z' in open_date, f"Date should be in ISO format: {open_date}"
+            assert 'T' in open_date, f"Date should be in ISO format: {open_date}"
+            assert re.match(tz_pattern, open_date), f"Date should have timezone offset format: {open_date}"
         
         # Validate category mappings
         unique_types = saved_df['type'].unique()
@@ -244,7 +247,7 @@ class TestPreprocessCSVOutput:
             pytest.skip("No valid data found in mock data for testing")
         
         # Test with filters enabled
-        last_run = datetime(2025, 6, 1, tzinfo=timezone.utc)  # Earlier date to filter more records
+        last_incident_id = ""  # Empty string to include all incident IDs
         config_filtered = {
             'category_mapping_file': category_mapping_file,
             'filter_rejected': True,
@@ -252,7 +255,7 @@ class TestPreprocessCSVOutput:
             'filter_by_date': True
         }
         
-        result_filtered = preprocess(valid_data, last_run, config_filtered)
+        result_filtered = preprocess(valid_data, last_incident_id, config_filtered)
         
         # Test with filters disabled
         config_unfiltered = {
@@ -262,7 +265,7 @@ class TestPreprocessCSVOutput:
             'filter_by_date': False
         }
         
-        result_unfiltered = preprocess(valid_data, last_run, config_unfiltered)
+        result_unfiltered = preprocess(valid_data, last_incident_id, config_unfiltered)
         
         # Save both results
         filtered_filename = f"preprocessed_data_filtered_{self.timestamp}.csv"
@@ -289,8 +292,8 @@ class TestPreprocessCSVOutput:
     def test_preprocess_with_csv_output_error_handling(self, tmpdir):
         """Test preprocessing error handling and edge cases with CSV output."""
         # Test with empty data
-        last_run = datetime(2025, 6, 1, tzinfo=timezone.utc)
-        result_empty = preprocess([], last_run)
+        last_incident_id = ""  # Empty string to include all incident IDs
+        result_empty = preprocess([], last_incident_id)
         
         # Save empty result
         empty_filename = f"preprocessed_data_empty_{self.timestamp}.csv"
@@ -329,7 +332,7 @@ class TestPreprocessCSVOutput:
         
         # This should raise FileNotFoundError
         with pytest.raises(FileNotFoundError):
-            preprocess(test_data, last_run, invalid_config)
+            preprocess(test_data, last_incident_id, invalid_config)
         
         print(f"✓ Error handling test completed:")
         print(f"  - Empty data output: {empty_path}")
@@ -348,7 +351,7 @@ class TestPreprocessCSVOutput:
             pytest.skip("No valid data found in mock data for testing")
         
         # Configure preprocessing
-        last_run = datetime(2025, 7, 1, tzinfo=timezone.utc)
+        last_incident_id = ""  # Empty string to include all incident IDs
         config = {
             'category_mapping_file': category_mapping_file,
             'filter_rejected': True,
@@ -357,7 +360,7 @@ class TestPreprocessCSVOutput:
         }
         
         # Run preprocessing
-        result = preprocess(valid_data, last_run, config)
+        result = preprocess(valid_data, last_incident_id, config)
         
         # Save to CSV
         output_filename = f"preprocessed_data_quality_{self.timestamp}.csv"
@@ -387,8 +390,11 @@ class TestPreprocessCSVOutput:
         assert all(saved_df['tenantItemID'].str.startswith('BAL-')), "All tenantItemID should start with BAL-"
         
         # Validate date format
+        import re
+        tz_pattern = r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+[+-]\d{4}$'
         for date_str in saved_df['openDate']:
-            assert 'T' in date_str and 'Z' in date_str, f"Invalid date format: {date_str}"
+            assert 'T' in date_str, f"Date should be in ISO format: {date_str}"
+            assert re.match(tz_pattern, date_str), f"Date should have timezone offset format: {date_str}"
         
         # Validate sharing levels
         valid_sharing = ['FOUO', 'Official Use Only', 'Unclassified']
@@ -437,7 +443,7 @@ class TestPreprocessCSVOutput:
                 large_dataset.append(new_record)
         
         # Configure preprocessing
-        last_run = datetime(2025, 7, 1, tzinfo=timezone.utc)
+        last_incident_id = ""  # Empty string to include all incident IDs
         config = {
             'category_mapping_file': category_mapping_file,
             'filter_rejected': True,
@@ -447,7 +453,7 @@ class TestPreprocessCSVOutput:
         
         # Measure processing time
         start_time = datetime.now()
-        result = preprocess(large_dataset, last_run, config)
+        result = preprocess(large_dataset, last_incident_id, config)
         end_time = datetime.now()
         processing_time = (end_time - start_time).total_seconds()
         

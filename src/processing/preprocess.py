@@ -173,7 +173,7 @@ def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Option
                 df_reset,
                 category_map,
                 on=merge_columns,
-                how='inner'
+                how='left'  # Changed from 'inner' to 'left' to preserve all records
             )
             merged_count = len(df)
             
@@ -181,6 +181,23 @@ def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Option
             if 'Incident_ID' not in df.columns and 'original_incident_id' in df.columns:
                 logger.info("Restoring 'Incident_ID' from 'original_incident_id' after merge")
                 df['Incident_ID'] = df['original_incident_id']
+            
+            # Handle records that didn't match any category mapping
+            category_columns = ['category', 'type', 'subtype', 'sharing']
+            for col in category_columns:
+                if col in df.columns:
+                    null_count = df[col].isnull().sum()
+                    if null_count > 0:
+                        logger.warning(f"Found {null_count} records with no mapping for '{col}'. Applying default values.")
+                        # Apply default values for unmapped records
+                        if col == 'category':
+                            df[col] = df[col].fillna('Incident')
+                        elif col == 'type':
+                            df[col] = df[col].fillna('Security')
+                        elif col == 'subtype':
+                            df[col] = df[col].fillna('Other')
+                        elif col == 'sharing':
+                            df[col] = df[col].fillna('Share with Tenant DHS Operations Centers')
             
             # If the merge resulted in a different number of rows, we need to adjust
             if merged_count != original_count:
@@ -207,7 +224,9 @@ def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Option
                 logger.warning("'Incident_ID' column not found after merge")
                 logger.warning(f"Available columns: {df.columns.tolist()}")
             
-            logger.info(f"Mapped categories: {merged_count} records matched, {original_count - merged_count} records dropped")
+            # With a left join, no records should be dropped, but we might have unmapped records
+            unmapped_records = sum(df[category_columns].isnull().any(axis=1))
+            logger.info(f"Category mapping: {merged_count} total records, {unmapped_records} records with default category values")
             
             # Log each record's Incident ID after category mapping
             if 'Incident_ID' in df.columns:
@@ -243,12 +262,42 @@ def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Option
         for key, value in default_fields.items():
             df[key] = value
         
-        # Format datetime columns
+        # Format datetime columns - convert to UTC with Z suffix as per swagger spec
         cols_to_format = ['Local_Date_Reported', 'Date_SIR_Processed__NT']
-        
+
         for col in cols_to_format:
             logger.debug(f"Formatting datetime column: {col}")
-            df[col] = pd.to_datetime(df[col], utc=True).dt.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+            # Convert to datetime, ensure timezone info, convert to UTC, then format with Z suffix
+            dt_series = pd.to_datetime(df[col])
+            
+            # Check if the datetime has timezone info, if not, localize to US/Eastern
+            if dt_series.dt.tz is None:
+                logger.debug(f"Localizing {col} to US/Eastern timezone")
+                import pytz
+                eastern_tz = pytz.timezone('US/Eastern')
+                dt_series = dt_series.dt.tz_localize(eastern_tz)
+            
+            # Convert to UTC and format with Z suffix
+            df[col] = dt_series.dt.tz_convert('UTC').dt.strftime('%Y-%m-%dT%H:%M:%S.%f').str[:-3] + 'Z'
+        
+        # Format default datetime fields if they are not None
+        default_datetime_fields = ['scheduledDate', 'mediaReportDate', 'officialReportDate', 'publishDate']
+        
+        for field in default_datetime_fields:
+            if field in df.columns and df[field].notna().any():
+                logger.debug(f"Formatting default datetime field: {field}")
+                # Convert to datetime, ensure timezone info, convert to UTC, then format with Z suffix
+                dt_series = pd.to_datetime(df[field])
+                
+                # Check if the datetime has timezone info, if not, localize to US/Eastern
+                if dt_series.dt.tz is None:
+                    logger.debug(f"Localizing {field} to US/Eastern timezone")
+                    import pytz
+                    eastern_tz = pytz.timezone('US/Eastern')
+                    dt_series = dt_series.dt.tz_localize(eastern_tz)
+                
+                # Convert to UTC and format with Z suffix
+                df[field] = dt_series.dt.tz_convert('UTC').dt.strftime('%Y-%m-%dT%H:%M:%S.%f').str[:-3] + 'Z'
         
         # Convert numeric columns to string
         cols_to_convert = ['Facility_Latitude', 'Facility_Longitude']
