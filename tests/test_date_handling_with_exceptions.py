@@ -14,47 +14,9 @@ import pytz
 # Add the parent directory to the path so we can import the modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.utils.time_utils import format_datetime_for_api, ensure_valid_datetime
+from src.utils.time_utils import format_datetime_for_api
 
 
-def test_ensure_valid_datetime():
-    """Test the ensure_valid_datetime function."""
-    print("Testing ensure_valid_datetime function...")
-    
-    # Get current time in Eastern timezone
-    eastern_tz = pytz.timezone('US/Eastern')
-    current_time = datetime.now(eastern_tz)
-    
-    # Test with a datetime in the past
-    past_time = current_time - timedelta(days=1)
-    result = ensure_valid_datetime(past_time, "past_date")
-    print(f"Past date: {past_time.isoformat()}")
-    print(f"Result: {result.isoformat()}")
-    print(f"Unchanged: {result == past_time}")
-    
-    # Test with a datetime in the future - should raise exception
-    future_time = current_time + timedelta(days=1)
-    print(f"Future date: {future_time.isoformat()}")
-    try:
-        result = ensure_valid_datetime(future_time, "future_date")
-        print("ERROR: Future date did not raise exception!")
-    except ValueError as e:
-        print(f"SUCCESS: Future date correctly raised exception: {str(e)}")
-    
-    # Test with a pandas Series containing a future date - should raise exception
-    dates = pd.Series([
-        past_time,
-        current_time,
-        future_time
-    ])
-    print(f"Series with future date:")
-    try:
-        result = ensure_valid_datetime(dates, "date_series")
-        print("ERROR: Series with future date did not raise exception!")
-    except ValueError as e:
-        print(f"SUCCESS: Series with future date correctly raised exception: {str(e)}")
-    
-    print("ensure_valid_datetime test complete.\n")
 
 
 def test_format_datetime_for_api():
@@ -99,7 +61,6 @@ def test_format_datetime_for_api():
 if __name__ == "__main__":
     print("Running date handling tests with exceptions...\n")
     
-    test_ensure_valid_datetime()
     test_format_datetime_for_api()
     
     print("All tests complete.")

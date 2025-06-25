@@ -282,7 +282,7 @@ def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Option
             df[col] = format_datetime_for_api(dt_series, col)
         
         # Format default datetime fields using the time_utils function
-        default_datetime_fields = ['scheduledDate', 'mediaReportDate', 'officialReportDate', 'publishDate', 'openDate']
+        default_datetime_fields = ['scheduledDate', 'mediaReportDate', 'officialReportDate', 'publishDate']
         
         for field in default_datetime_fields:
             if field in df.columns and df[field].notna().any():
@@ -389,26 +389,6 @@ def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Option
         
         # Post-processing step to ensure openDate is properly set and add the required item field
         logger.info("Post-processing: Ensuring openDate is properly set and adding required item field")
-        
-        # Check if openDate is null and fix it using Local_Date_Reported
-        if 'openDate' in df.columns:
-            null_count = df['openDate'].isnull().sum()
-            if null_count > 0:
-                logger.warning(f"Found {null_count} records with null openDate values")
-                
-                # Check if we still have the original Local_Date_Reported column
-                if 'Local_Date_Reported' in df.columns:
-                    logger.info("Fixing null openDate values using Local_Date_Reported")
-                    # Format Local_Date_Reported and use it to set openDate for null values
-                    mask = df['openDate'].isnull()
-                    dt_series = pd.to_datetime(df.loc[mask, 'Local_Date_Reported'], utc=True)
-                    df.loc[mask, 'openDate'] = format_datetime_for_api(dt_series, 'Local_Date_Reported')
-                    
-                    # Verify fix
-                    null_count_after = df['openDate'].isnull().sum()
-                    logger.info(f"After fix: {null_count_after} records still have null openDate values")
-        else:
-            logger.warning("openDate column not found in the processed data")
         
         # Log sample values for debugging
         if not df.empty:

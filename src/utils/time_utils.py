@@ -271,20 +271,20 @@ def update_last_run_time_in_ssm(timestamp: Optional[datetime] = None) -> None:
         raise
 
 
-def ensure_valid_datetime(dt_series: Union[pd.Series, datetime], field_name: str = "datetime") -> Union[pd.Series, datetime]:
+
+def format_datetime_for_api(dt_series: Union[pd.Series, datetime], field_name: str = "datetime") -> Union[pd.Series, str]:
     """
-    Ensure datetime values are valid.
+    Format datetime values for API submission.
     
-    This function checks if datetime values are on future days compared to the current time
-    in Eastern timezone, and raises an exception if they are. Dates on the same day are allowed
-    even if they are later in the day.
+    This function ensures datetime values are valid (not on future days compared to the current time),
+    converts them to UTC, and formats them with Z suffix as per swagger spec.
     
     Args:
         dt_series (Union[pd.Series, datetime]): Pandas Series of datetime values or a single datetime
         field_name (str, optional): Name of the field being processed, for logging purposes
         
     Returns:
-        Union[pd.Series, datetime]: Processed datetime values
+        Union[pd.Series, str]: Formatted datetime values
         
     Raises:
         ValueError: If any datetime value is on a future day
@@ -315,7 +315,6 @@ def ensure_valid_datetime(dt_series: Union[pd.Series, datetime], field_name: str
             error_msg = f"{field_name} date ({dt_series.isoformat()}) is on a future day compared to current date ({current_date_eastern})"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        return dt_series
     
     # Handle pandas Series
     else:
@@ -340,33 +339,6 @@ def ensure_valid_datetime(dt_series: Union[pd.Series, datetime], field_name: str
             error_msg = f"Found {future_dates.sum()} future dates in {field_name}. Example: {future_date_example} is on a future day compared to current date ({current_date_eastern})"
             logger.error(error_msg)
             raise ValueError(error_msg)
-            
-        return dt_series
-
-
-def format_datetime_for_api(dt_series: Union[pd.Series, datetime], field_name: str = "datetime") -> Union[pd.Series, str]:
-    """
-    Format datetime values for API submission.
-    
-    This function ensures datetime values are valid (not in the future),
-    converts them to UTC, and formats them with Z suffix as per swagger spec.
-    
-    Args:
-        dt_series (Union[pd.Series, datetime]): Pandas Series of datetime values or a single datetime
-        field_name (str, optional): Name of the field being processed, for logging purposes
-        
-    Returns:
-        Union[pd.Series, str]: Formatted datetime values
-        
-    Raises:
-        ValueError: If any datetime value is in the future
-    """
-    # Import logger here to avoid circular imports
-    from ..utils.logging_utils import get_logger
-    logger = get_logger('time_utils')
-    
-    # Ensure valid datetime (not in the future)
-    dt_series = ensure_valid_datetime(dt_series, field_name)
     
     # Handle single datetime object
     if isinstance(dt_series, datetime):
