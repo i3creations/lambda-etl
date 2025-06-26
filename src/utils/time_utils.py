@@ -277,8 +277,8 @@ def format_datetime_for_api(dt_series: Union[pd.Series, datetime], field_name: s
     Format datetime values for API consumption.
     
     This function handles datetime conversion for API requests, ensuring proper timezone
-    handling and formatting to the expected format: "2025-06-25T14:58:17.424Z"
-    - If the datetime has a timezone, it's converted to UTC
+    handling and formatting to the expected format: "2025-06-25T12:06:27Z"
+    - For all datetime fields, it preserves the original time and just changes the timezone designation to "Z"
     - If the datetime has no timezone info, it's assumed to be in UTC
     - The result is formatted with exactly 3 decimal places for milliseconds and a 'Z' suffix
     
@@ -295,8 +295,8 @@ def format_datetime_for_api(dt_series: Union[pd.Series, datetime], field_name: s
         if dt_series.tzinfo is None:
             dt = dt_series.replace(tzinfo=timezone.utc)
         else:
-            # Convert to UTC if it has a different timezone
-            dt = dt_series.astimezone(timezone.utc)
+            # Keep the original time but just change the timezone designation to UTC
+            dt = dt_series.replace(tzinfo=timezone.utc)
             
         # Format with exactly 3 decimal places for milliseconds and 'Z' suffix
         return dt.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
@@ -315,8 +315,8 @@ def format_datetime_for_api(dt_series: Union[pd.Series, datetime], field_name: s
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=timezone.utc)
             else:
-                # Convert to UTC if it has a different timezone
-                dt = dt.astimezone(timezone.utc)
+                # Keep the original time but just change the timezone designation to UTC
+                dt = dt.replace(tzinfo=timezone.utc)
                 
             # Format with exactly 3 decimal places for milliseconds and 'Z' suffix
             return dt.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'

@@ -56,8 +56,8 @@ class TestTimeUtils:
         # Format the datetime (should convert to UTC)
         result = format_datetime_for_api(dt)
         
-        # Check the result (10:58 Eastern should be 14:58 UTC)
-        assert result == "2025-06-25T14:58:17.424Z"
+        # Check the result (preserve original time, just change timezone designation to Z)
+        assert result == "2025-06-25T10:58:17.424Z"
     
     def test_format_datetime_for_api_with_pandas_timestamp(self):
         """Test format_datetime_for_api with pandas Timestamp objects."""

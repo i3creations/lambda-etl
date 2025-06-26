@@ -115,7 +115,20 @@ def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Option
         if filter_by_incident_id:
             logger.info(f"Applying filter: excluding records with incident ID <= {last_incident_id}")
             # Filter by incident ID - only include records with ID greater than last processed ID
-            filter_mask = filter_mask & (df.index > last_incident_id)
+            # Convert index to integer if it's a string
+            if df.index.dtype == 'object':
+                try:
+                    # Try to convert the index to integers
+                    numeric_index = pd.to_numeric(df.index, errors='coerce')
+                    # Only apply the filter to rows where the conversion succeeded
+                    filter_mask = filter_mask & (numeric_index > last_incident_id)
+                except Exception as e:
+                    logger.warning(f"Could not convert all incident IDs to numeric for filtering: {str(e)}")
+                    # Skip filtering if conversion fails
+                    logger.warning("Skipping incident ID filtering due to non-numeric IDs")
+            else:
+                # If the index is already numeric, apply the filter directly
+                filter_mask = filter_mask & (df.index > last_incident_id)
         
         if not filter_mask.all():
             df = df.loc[filter_mask]
@@ -269,8 +282,8 @@ def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Option
         for col in cols_to_format:
             logger.debug(f"Formatting datetime column: {col}")
             # Convert to datetime and format using our utility function
-            # Explicitly parse ISO 8601 strings with timezone info
-            dt_series = pd.to_datetime(df[col], utc=True)
+            # Parse ISO 8601 strings preserving original timezone info
+            dt_series = pd.to_datetime(df[col])  # Removed utc=True to preserve original timezone
             
             # Log the original and parsed values for debugging
             if not df[col].empty:
