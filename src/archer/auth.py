@@ -9,6 +9,7 @@ installed via pip: `pip install uscis-opts>=0.1.4`.
 """
 
 from typing import Dict, List, Any, Optional
+from datetime import datetime
 from ..utils.logging_utils import get_logger
 
 # Get logger for this module
