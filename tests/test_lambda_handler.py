@@ -10,10 +10,9 @@ from unittest.mock import patch, MagicMock, mock_open
 from lambda_handler import (
     get_env_variable, 
     load_config_from_env, 
-    get_time_log_from_env, 
-    update_time_log_in_env,
     lambda_handler
 )
+from src.utils.time_utils import get_last_run_time_from_ssm, update_last_run_time_in_ssm
 
 
 class TestLambdaHandler:
@@ -90,47 +89,76 @@ class TestLambdaHandler:
             with pytest.raises(ValueError):
                 load_config_from_env()
 
-    def test_get_time_log_from_env_success(self):
-        """Test successful retrieval of time log from environment."""
-        test_time = '2023-01-01T12:00:00'
-        with patch.dict(os.environ, {'OPSAPI_TIME_LOG': test_time}):
-            result = get_time_log_from_env()
+    @patch('src.utils.time_utils.boto3.client')
+    def test_get_last_run_time_from_ssm(self, mock_boto3_client):
+        """Test successful retrieval of last run time from SSM Parameter Store."""
+        # Setup mock SSM client
+        mock_ssm = MagicMock()
+        mock_ssm.get_parameter.return_value = {
+            'Parameter': {
+                'Value': '2023-01-01T12:00:00-05:00'
+            }
+        }
+        mock_boto3_client.return_value = mock_ssm
+        
+        # Call the function
+        with patch.dict(os.environ, {'AWS_ENDPOINT_URL': 'http://localhost:4566'}):
+            result = get_last_run_time_from_ssm()
+            
+            # Verify result
             assert result.year == 2023
             assert result.month == 1
             assert result.day == 1
+            
+            # Verify SSM client was created with endpoint URL
+            mock_boto3_client.assert_called_with('ssm', endpoint_url='http://localhost:4566')
+            
+            # Verify get_parameter was called with correct parameter name
+            mock_ssm.get_parameter.assert_called_with(Name='/ops-api/last-run-time')
 
-    def test_get_time_log_from_env_missing(self):
-        """Test retrieval of time log when environment variable is missing."""
-        with patch.dict(os.environ, {}, clear=True):
-            result = get_time_log_from_env()
-            # Should return current time when missing
-            assert isinstance(result, datetime)
-
-    def test_get_time_log_from_env_invalid_format(self):
-        """Test retrieval of time log with invalid format."""
-        with patch.dict(os.environ, {'OPSAPI_TIME_LOG': 'invalid_date'}):
-            result = get_time_log_from_env()
-            # Should return current time when invalid
-            assert isinstance(result, datetime)
-
-    def test_update_time_log_in_env(self):
-        """Test updating time log in environment."""
-        test_time = datetime(2023, 1, 1, 12, 0, 0)
+    @patch('src.utils.time_utils.boto3.client')
+    def test_get_last_run_time_from_ssm_parameter_not_found(self, mock_boto3_client):
+        """Test retrieval of last run time when parameter doesn't exist."""
+        # Setup mock SSM client to raise ParameterNotFound
+        mock_ssm = MagicMock()
+        mock_ssm.exceptions.ParameterNotFound = Exception
+        mock_ssm.get_parameter.side_effect = mock_ssm.exceptions.ParameterNotFound()
+        mock_boto3_client.return_value = mock_ssm
         
-        # Should not raise an error
-        update_time_log_in_env(test_time)
+        # Call the function
+        result = get_last_run_time_from_ssm()
+        
+        # Should return current time when parameter not found
+        assert isinstance(result, datetime)
+
+    @patch('src.utils.time_utils.boto3.client')
+    def test_update_last_run_time_in_ssm(self, mock_boto3_client):
+        """Test updating last run time in SSM Parameter Store."""
+        # Setup mock SSM client
+        mock_ssm = MagicMock()
+        mock_boto3_client.return_value = mock_ssm
+        
+        # Call the function with a test datetime
+        test_time = datetime(2023, 1, 1, 12, 0, 0)
+        update_last_run_time_in_ssm(test_time)
+        
+        # Verify put_parameter was called with correct parameters
+        mock_ssm.put_parameter.assert_called_once()
+        args, kwargs = mock_ssm.put_parameter.call_args
+        assert kwargs['Name'] == '/ops-api/last-run-time'
+        assert kwargs['Overwrite'] == True
 
     @patch('lambda_handler.send')
     @patch('lambda_handler.preprocess')
     @patch('lambda_handler.get_archer_auth')
     @patch('lambda_handler.load_config_from_env')
-    @patch('lambda_handler.get_time_log_from_env')
-    @patch('lambda_handler.update_time_log_in_env')
-    def test_handler_success_dry_run(self, mock_update_time, mock_get_time, mock_load_config, 
+    @patch('lambda_handler.get_last_run_time_from_ssm')
+    @patch('lambda_handler.update_last_run_time_in_ssm')
+    def test_handler_success_dry_run(self, mock_update_time, mock_get_last_run_time, mock_load_config, 
                                    mock_get_archer, mock_preprocess, mock_send):
         """Test successful handler execution with dry run."""
         # Setup mocks
-        mock_get_time.return_value = datetime(2023, 1, 1)
+        mock_get_last_run_time.return_value = datetime(2023, 1, 1)
         mock_load_config.return_value = {
             'archer': {'username': 'test'},
             'ops_portal': {'auth_url': 'test'},
@@ -172,13 +200,13 @@ class TestLambdaHandler:
     @patch('lambda_handler.preprocess')
     @patch('lambda_handler.get_archer_auth')
     @patch('lambda_handler.load_config_from_env')
-    @patch('lambda_handler.get_time_log_from_env')
-    @patch('lambda_handler.update_time_log_in_env')
-    def test_handler_success_with_sending(self, mock_update_time, mock_get_time, mock_load_config, 
+    @patch('lambda_handler.get_last_run_time_from_ssm')
+    @patch('lambda_handler.update_last_run_time_in_ssm')
+    def test_handler_success_with_sending(self, mock_update_time, mock_get_last_run_time, mock_load_config, 
                                         mock_get_archer, mock_preprocess, mock_send):
         """Test successful handler execution with actual sending."""
         # Setup mocks
-        mock_get_time.return_value = datetime(2023, 1, 1)
+        mock_get_last_run_time.return_value = datetime(2023, 1, 1)
         mock_load_config.return_value = {
             'archer': {'username': 'test'},
             'ops_portal': {'auth_url': 'test'},
@@ -220,13 +248,13 @@ class TestLambdaHandler:
     @patch('lambda_handler.preprocess')
     @patch('lambda_handler.get_archer_auth')
     @patch('lambda_handler.load_config_from_env')
-    @patch('lambda_handler.get_time_log_from_env')
-    @patch('lambda_handler.update_time_log_in_env')
-    def test_handler_empty_data(self, mock_update_time, mock_get_time, mock_load_config, 
+    @patch('lambda_handler.get_last_run_time_from_ssm')
+    @patch('lambda_handler.update_last_run_time_in_ssm')
+    def test_handler_empty_data(self, mock_update_time, mock_get_last_run_time, mock_load_config, 
                               mock_get_archer, mock_preprocess, mock_send):
         """Test handler execution with empty data."""
         # Setup mocks
-        mock_get_time.return_value = datetime(2023, 1, 1)
+        mock_get_last_run_time.return_value = datetime(2023, 1, 1)
         mock_load_config.return_value = {
             'archer': {'username': 'test'},
             'ops_portal': {'auth_url': 'test'},
@@ -261,13 +289,13 @@ class TestLambdaHandler:
     @patch('lambda_handler.preprocess')
     @patch('lambda_handler.get_archer_auth')
     @patch('lambda_handler.load_config_from_env')
-    @patch('lambda_handler.get_time_log_from_env')
-    @patch('lambda_handler.update_time_log_in_env')
-    def test_handler_with_failures(self, mock_update_time, mock_get_time, mock_load_config, 
+    @patch('lambda_handler.get_last_run_time_from_ssm')
+    @patch('lambda_handler.update_last_run_time_in_ssm')
+    def test_handler_with_failures(self, mock_update_time, mock_get_last_run_time, mock_load_config, 
                                  mock_get_archer, mock_preprocess, mock_send):
         """Test handler execution with some sending failures."""
         # Setup mocks
-        mock_get_time.return_value = datetime(2023, 1, 1)
+        mock_get_last_run_time.return_value = datetime(2023, 1, 1)
         mock_load_config.return_value = {
             'archer': {'username': 'test'},
             'ops_portal': {'auth_url': 'test'},

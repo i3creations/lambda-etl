@@ -24,7 +24,7 @@ from ..utils.time_utils import format_datetime_for_api
 logger = get_logger('processing.preprocess')
 
 
-def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
+def preprocess(data: List[Dict[str, Any]], last_run_time: datetime, config: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
     """
     Preprocess Significant Incident Report (SIR) data.
     
@@ -33,7 +33,7 @@ def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Option
     
     Args:
         data (List[Dict[str, Any]]): Raw SIR data from the Archer system
-        last_incident_id (int): ID of the last processed incident
+        last_run_time (datetime): Timestamp of the last run time
         config (Dict[str, Any], optional): Configuration dictionary. If None, uses default values.
         
     Returns:
@@ -51,13 +51,13 @@ def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Option
             'category_mapping_file': 'config/category_mappings.csv',
             'filter_rejected': True,
             'filter_unprocessed': True,
-            'filter_by_incident_id': True
+            'filter_by_datetime': True
         }
     
     category_mapping_file = config.get('category_mapping_file', 'config/category_mappings.csv')
     filter_rejected = config.get('filter_rejected', True)
     filter_unprocessed = config.get('filter_unprocessed', True)
-    filter_by_incident_id = config.get('filter_by_incident_id', True)
+    filter_by_datetime = config.get('filter_by_datetime', True)
     
     try:
         # Check if data is empty
@@ -112,23 +112,40 @@ def preprocess(data: List[Dict[str, Any]], last_incident_id: int, config: Option
             logger.info("Applying filter: excluding unprocessed SIRs")
             filter_mask = filter_mask & (~df['Date_SIR_Processed__NT'].isnull())
             
-        if filter_by_incident_id:
-            logger.info(f"Applying filter: excluding records with incident ID <= {last_incident_id}")
-            # Filter by incident ID - only include records with ID greater than last processed ID
-            # Convert index to integer if it's a string
-            if df.index.dtype == 'object':
-                try:
-                    # Try to convert the index to integers
-                    numeric_index = pd.to_numeric(df.index, errors='coerce')
-                    # Only apply the filter to rows where the conversion succeeded
-                    filter_mask = filter_mask & (numeric_index > last_incident_id)
-                except Exception as e:
-                    logger.warning(f"Could not convert all incident IDs to numeric for filtering: {str(e)}")
-                    # Skip filtering if conversion fails
-                    logger.warning("Skipping incident ID filtering due to non-numeric IDs")
-            else:
-                # If the index is already numeric, apply the filter directly
-                filter_mask = filter_mask & (df.index > last_incident_id)
+        if filter_by_datetime:
+            logger.info(f"Applying filter: excluding records with Date_Time_SIR_Processed <= {last_run_time}")
+            # Filter by Date_Time_SIR_Processed - only include records with datetime greater than last run time
+            # and with Submission_Status_1 = 'Assigned for Further Action'
+            try:
+                # Check if the required columns exist
+                if 'Date_Time_SIR_Processed' not in df.columns:
+                    logger.warning("Date_Time_SIR_Processed column not found, checking for alternative columns")
+                    # Try to use Date_SIR_Processed__NT as a fallback
+                    if 'Date_SIR_Processed__NT' in df.columns:
+                        logger.info("Using Date_SIR_Processed__NT as fallback for filtering")
+                        datetime_series = pd.to_datetime(df['Date_SIR_Processed__NT'], errors='coerce')
+                    else:
+                        logger.warning("No suitable datetime column found for filtering, skipping datetime filter")
+                        datetime_series = None
+                else:
+                    # Convert Date_Time_SIR_Processed to datetime for comparison
+                    datetime_series = pd.to_datetime(df['Date_Time_SIR_Processed'], errors='coerce')
+                
+                # Check if Submission_Status_1 column exists
+                submission_status_filter = True
+                if 'Submission_Status_1' in df.columns:
+                    logger.info("Filtering by Submission_Status_1 = 'Assigned for Further Action'")
+                    submission_status_filter = (df['Submission_Status_1'] == 'Assigned for Further Action')
+                else:
+                    logger.warning("Submission_Status_1 column not found, not filtering by submission status")
+                
+                # Apply the filters if we have a valid datetime series
+                if datetime_series is not None:
+                    # Apply both filters: datetime > last_run_time AND submission_status = 'Assigned for Further Action'
+                    filter_mask = filter_mask & (datetime_series > last_run_time) & submission_status_filter
+            except Exception as e:
+                logger.warning(f"Error applying datetime filter: {str(e)}")
+                logger.warning("Skipping datetime filtering due to error")
         
         if not filter_mask.all():
             df = df.loc[filter_mask]

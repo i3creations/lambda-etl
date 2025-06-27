@@ -91,18 +91,20 @@ class TestProcessing:
             'Section_5__Action_Taken': '<p>Actions taken</p>',
             'Type_of_SIR': 'Test Type',
             'Category_Type': 'Test Category',
-            'Sub_Category_Type': 'Test Subcategory'
+            'Sub_Category_Type': 'Test Subcategory',
+            'Date_Time_SIR_Processed': '2023-01-01T15:00:00Z',
+            'Submission_Status_1': 'Assigned for Further Action'
         }]
         
         # Rename columns to match what preprocess.py expects
         data = rename_columns_for_test(data)
         
-        # Use 0 as last_incident_id instead of datetime
-        last_incident_id = 0
+        # Use a datetime object for last_run_time
+        last_run_time = datetime(2023, 1, 1)
         config = {'category_mapping_file': '/nonexistent/file.csv'}
         
         with pytest.raises(FileNotFoundError):
-            preprocess(data, last_incident_id, config)
+            preprocess(data, last_run_time, config)
             
     def test_preprocess_success(self, tmpdir):
         """Test successful preprocessing using mock data."""
@@ -140,6 +142,9 @@ class TestProcessing:
                     record['Section_5__Action_Taken'] = 'No action specified'
                 if not record.get('Sub_Category_Type'):
                     record['Sub_Category_Type'] = record.get('Category_Type', '')
+                # Add the new fields needed for datetime filtering
+                record['Date_Time_SIR_Processed'] = record.get('Date_SIR_Processed__NT')
+                record['Submission_Status_1'] = 'Assigned for Further Action'
                 valid_data.append(record)
                 if len(valid_data) >= 3:  # Just use a few records for testing
                     break
@@ -147,16 +152,16 @@ class TestProcessing:
         # Rename columns to match what preprocess.py expects
         valid_data = rename_columns_for_test(valid_data)
         
-        # Use 0 as last_incident_id instead of datetime
-        last_incident_id = 0
+        # Use a datetime object for last_run_time
+        last_run_time = datetime(2020, 1, 1)  # Use an early date to ensure records pass the filter
         config = {
             'category_mapping_file': category_file.strpath,
             'filter_rejected': False,
             'filter_unprocessed': False,
-            'filter_by_date': True
+            'filter_by_datetime': True
         }
         
-        result = preprocess(valid_data, last_incident_id, config)
+        result = preprocess(valid_data, last_run_time, config)
         
         # Verify the result
         assert isinstance(result, pd.DataFrame)
@@ -204,13 +209,13 @@ class TestProcessing:
         # Create test scenarios
         data = [
             # Should be filtered out - rejected
-            {**base_record, 'SIR_': 'REJECTED', 'Incidents_Id': 'INC-001', 'Type_of_SIR': 'Infrastructure Impact Events', 'Category_Type': 'Natural Disaster', 'Sub_Category_Type': 'Tsunami'},
+            {**base_record, 'SIR_': 'REJECTED', 'Incidents_Id': 'INC-001', 'Type_of_SIR': 'Infrastructure Impact Events', 'Category_Type': 'Natural Disaster', 'Sub_Category_Type': 'Tsunami', 'Date_Time_SIR_Processed': '2025-01-01T10:00:00Z', 'Submission_Status_1': 'Assigned for Further Action'},
             # Should be filtered out - not processed
-            {**base_record, 'Date_SIR_Processed__NT': None, 'SIR_': 'BAL-TEST-002', 'Incidents_Id': 'INC-002', 'Type_of_SIR': 'Infrastructure Impact Events', 'Category_Type': 'Natural Disaster', 'Sub_Category_Type': 'Earthquake'},
-            # Should be filtered out - future date (but now we're not filtering by date)
-            {**base_record, 'Local_Date_Reported': '2025-12-01T10:00:00Z', 'SIR_': 'BAL-TEST-003', 'Incidents_Id': 'INC-003', 'Type_of_SIR': 'Infrastructure Impact Events', 'Category_Type': 'Natural Disaster', 'Sub_Category_Type': 'Tsunami'},
-            # Should pass all filters (past date)
-            {**base_record, 'Local_Date_Reported': '2025-01-01T10:00:00Z', 'SIR_': 'BAL-TEST-004', 'Incidents_Id': 'INC-004', 'Type_of_SIR': 'Infrastructure Impact Events', 'Category_Type': 'Natural Disaster', 'Sub_Category_Type': 'Tsunami'}
+            {**base_record, 'Date_SIR_Processed__NT': None, 'SIR_': 'BAL-TEST-002', 'Incidents_Id': 'INC-002', 'Type_of_SIR': 'Infrastructure Impact Events', 'Category_Type': 'Natural Disaster', 'Sub_Category_Type': 'Earthquake', 'Date_Time_SIR_Processed': None, 'Submission_Status_1': 'Assigned for Further Action'},
+            # Should be filtered out - not assigned for further action
+            {**base_record, 'Local_Date_Reported': '2025-12-01T10:00:00Z', 'SIR_': 'BAL-TEST-003', 'Incidents_Id': 'INC-003', 'Type_of_SIR': 'Infrastructure Impact Events', 'Category_Type': 'Natural Disaster', 'Sub_Category_Type': 'Tsunami', 'Date_Time_SIR_Processed': '2025-12-01T10:00:00Z', 'Submission_Status_1': 'Not Assigned'},
+            # Should pass all filters (past date and assigned for further action)
+            {**base_record, 'Local_Date_Reported': '2025-01-01T10:00:00Z', 'SIR_': 'BAL-TEST-004', 'Incidents_Id': 'INC-004', 'Type_of_SIR': 'Infrastructure Impact Events', 'Category_Type': 'Natural Disaster', 'Sub_Category_Type': 'Tsunami', 'Date_Time_SIR_Processed': '2025-01-01T10:00:00Z', 'Submission_Status_1': 'Assigned for Further Action'}
         ]
         
         # Ensure all records have required fields
@@ -223,17 +228,16 @@ class TestProcessing:
         # Rename columns to match what preprocess.py expects
         data = rename_columns_for_test(data)
         
-        # Use 0 as last_incident_id instead of datetime
-        last_incident_id = 0
+        # Use a datetime object for last_run_time
+        last_run_time = datetime(2020, 1, 1)  # Use an early date to ensure records pass the datetime filter
         config = {
             'category_mapping_file': category_file.strpath,
             'filter_rejected': True,
             'filter_unprocessed': True,
-            'filter_by_date': False,  # Disable date filtering for this test
-            'filter_by_incident_id': False  # Disable incident ID filtering for this test
+            'filter_by_datetime': False  # Disable datetime filtering for this test to focus on other filters
         }
         
-        result = preprocess(data, last_incident_id, config)
+        result = preprocess(data, last_run_time, config)
         
         # Two records should pass all filters (since we're not filtering by date)
         assert len(result) == 2
@@ -273,23 +277,24 @@ class TestProcessing:
             'Incidents_Id': 'INC-REJECTED-001',
             'Type_of_SIR': 'Infrastructure Impact Events',
             'Category_Type': 'Natural Disaster',
-            'Sub_Category_Type': 'Tsunami'
+            'Sub_Category_Type': 'Tsunami',
+            'Date_Time_SIR_Processed': '2025-12-01T10:00:00Z',  # Future date
+            'Submission_Status_1': 'Not Assigned'  # Would normally be filtered
         }]
         
         # Rename columns to match what preprocess.py expects
         data = rename_columns_for_test(data)
         
-        # Use 0 as last_incident_id instead of datetime
-        last_incident_id = 0
+        # Use a datetime object for last_run_time
+        last_run_time = datetime(2020, 1, 1)
         config = {
             'category_mapping_file': category_file.strpath,
             'filter_rejected': False,  # Disable all filters for this test
             'filter_unprocessed': False,
-            'filter_by_date': False,
-            'filter_by_incident_id': False  # Disable incident ID filtering for this test
+            'filter_by_datetime': False
         }
         
-        result = preprocess(data, last_incident_id, config)
+        result = preprocess(data, last_run_time, config)
         
         # Record should not be filtered
         assert len(result) == 1
@@ -508,6 +513,9 @@ class TestProcessing:
                     record['Date_SIR_Processed__NT'] = record.get('Local_Date_Reported')
                 if not record.get('Section_5__Action_Taken'):
                     record['Section_5__Action_Taken'] = 'No action specified'
+                # Add the new fields needed for datetime filtering
+                record['Date_Time_SIR_Processed'] = record.get('Date_SIR_Processed__NT')
+                record['Submission_Status_1'] = 'Assigned for Further Action'
                 html_data.append(record)
                 break  # Just test with one record
         
@@ -515,16 +523,16 @@ class TestProcessing:
             # Rename columns to match what preprocess.py expects
             html_data = rename_columns_for_test(html_data)
             
-            # Use 0 as last_incident_id instead of datetime
-            last_incident_id = 0
+            # Use a datetime object for last_run_time
+            last_run_time = datetime(2020, 1, 1)
             config = {
                 'category_mapping_file': category_file.strpath,
                 'filter_rejected': True,
                 'filter_unprocessed': False,
-                'filter_by_date': True
+                'filter_by_datetime': True
             }
             
-            result = preprocess(html_data, last_incident_id, config)
+            result = preprocess(html_data, last_run_time, config)
             
             if len(result) > 0:
                 # Check that HTML tags were stripped

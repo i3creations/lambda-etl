@@ -53,13 +53,15 @@ try:
                 self.session.verify = False
                 logger.info("SSL verification enabled for Archer authentication")
         
-        def get_sir_data(self, since_incident_id=None) -> List[Dict[str, Any]]:
+        def get_sir_data(self, since_incident_id=None, since_date=None) -> List[Dict[str, Any]]:
             """
             Retrieve Significant Incident Report (SIR) data from Archer.
             
             Args:
                 since_incident_id (int, optional): If provided, only retrieve SIRs with
                     Incident_ID greater than this value.
+                since_date (datetime, optional): If provided, only retrieve SIRs with
+                    Date_Time_SIR_Processed greater than this value.
                     
             Returns:
                 List[Dict[str, Any]]: List of SIR data records
@@ -73,7 +75,15 @@ try:
                     return []
                 
                 sir_records = self._fetch_sir_records(client, sir_level_alias)
-                sir_records = self._filter_records_by_incident_id(sir_records, since_incident_id)
+                
+                # If since_date is provided, filter by date instead of incident ID
+                if since_date is not None:
+                    sir_records = self._filter_records_by_date(sir_records, since_date)
+                    logger.info(f"Filtered records by date: {since_date}")
+                elif since_incident_id is not None:
+                    sir_records = self._filter_records_by_incident_id(sir_records, since_incident_id)
+                    logger.info(f"Filtered records by incident ID: {since_incident_id}")
+                
                 sir_records = self._filter_records_by_status(sir_records)
                 
                 logger.info(f"Retrieved {len(sir_records)} SIR records from Archer")
@@ -199,6 +209,114 @@ try:
             
             logger.info(f"Filtered SIR data to {len(filtered_records)} records with Incident_ID > {since_incident_id}")
             return filtered_records
+            
+        def _filter_records_by_date(self, records: List[Dict[str, Any]], since_date) -> List[Dict[str, Any]]:
+            """
+            Filter records by Date_Time_SIR_Processed if since_date is provided.
+            
+            Args:
+                records: List of SIR records
+                since_date: Date to filter from (only include records with Date_Time_SIR_Processed > this value)
+                
+            Returns:
+                List[Dict[str, Any]]: Filtered records
+            """
+            if since_date is None or not records:
+                return records
+            
+            from datetime import datetime
+            import pytz
+            
+            # Ensure since_date is timezone-aware
+            if since_date.tzinfo is None:
+                since_date = pytz.UTC.localize(since_date)
+            
+            filtered_records = []
+            for record in records:
+                # Try Date_Time_SIR_Processed first, then fall back to Date_SIR_Processed__NT
+                record_date = None
+                
+                # Check for Date_Time_SIR_Processed
+                if 'Date_Time_SIR_Processed' in record and record['Date_Time_SIR_Processed']:
+                    record_date = self._parse_datetime(record['Date_Time_SIR_Processed'])
+                
+                # Fall back to Date_SIR_Processed__NT if needed
+                if record_date is None and 'Date_SIR_Processed__NT' in record and record['Date_SIR_Processed__NT']:
+                    record_date = self._parse_datetime(record['Date_SIR_Processed__NT'])
+                
+                # If we have a valid date and it's after since_date, include the record
+                if record_date is not None:
+                    if record_date > since_date:
+                        filtered_records.append(record)
+                else:
+                    logger.warning("No valid date field found for record, including it anyway")
+                    filtered_records.append(record)
+            
+            logger.info(f"Filtered SIR data to {len(filtered_records)} records with date > {since_date}")
+            return filtered_records
+            
+        def _parse_datetime(self, date_str) -> Optional[datetime]:
+            """
+            Parse a datetime string into a datetime object.
+            
+            Args:
+                date_str: Datetime string to parse
+                
+            Returns:
+                datetime: Parsed datetime object or None if parsing fails
+            """
+            from datetime import datetime
+            import pytz
+            import re
+            
+            if not date_str:
+                return None
+                
+            try:
+                # Handle various datetime formats
+                if isinstance(date_str, datetime):
+                    dt = date_str
+                elif isinstance(date_str, str):
+                    # Handle timezone formats like -04:00, +00:00, or Z
+                    if date_str.endswith('Z'):
+                        date_str = date_str.replace('Z', '+00:00')
+                    
+                    # Fix malformed microseconds (e.g., .19 should be .190000)
+                    # Pattern matches: YYYY-MM-DDTHH:MM:SS.XX±HH:MM where XX is 1-2 digits
+                    microsecond_pattern = r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})\.(\d{1,2})([-+]\d{2}:\d{2})$'
+                    match = re.match(microsecond_pattern, date_str)
+                    if match:
+                        base_datetime, microseconds, timezone_part = match.groups()
+                        # Pad microseconds to 6 digits
+                        padded_microseconds = microseconds.ljust(6, '0')
+                        date_str = f"{base_datetime}.{padded_microseconds}{timezone_part}"
+                    
+                    # Try to parse as ISO format
+                    try:
+                        dt = datetime.fromisoformat(date_str)
+                    except ValueError:
+                        # Try to parse as other common formats
+                        try:
+                            dt = datetime.strptime(date_str, '%Y-%m-%dT%H:%M:%S')
+                        except ValueError:
+                            try:
+                                dt = datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
+                            except ValueError:
+                                logger.warning(f"Failed to parse date string: {date_str}")
+                                return None
+                else:
+                    logger.warning(f"Unexpected date format: {type(date_str)} - {date_str}")
+                    return None
+                
+                # Ensure datetime is timezone-aware
+                if dt.tzinfo is None:
+                    dt = pytz.UTC.localize(dt)
+                    
+                return dt
+                
+            except Exception as e:
+                logger.warning(f"Error parsing datetime '{date_str}': {str(e)}")
+                return None
         
         def _extract_incident_id(self, record: Dict[str, Any]):
             """
@@ -372,13 +490,15 @@ except ImportError:
             self.logout()
             return False
             
-        def get_sir_data(self, since_incident_id=None) -> List[Dict[str, Any]]:
+        def get_sir_data(self, since_incident_id=None, since_date=None) -> List[Dict[str, Any]]:
             """
             Retrieve Significant Incident Report (SIR) data from Archer.
             
             Args:
                 since_incident_id (int, optional): If provided, only retrieve SIRs with
                     Incident_ID greater than this value.
+                since_date (datetime, optional): If provided, only retrieve SIRs with
+                    Date_Time_SIR_Processed greater than this value.
                     
             Returns:
                 List[Dict[str, Any]]: List of SIR data records

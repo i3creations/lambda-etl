@@ -254,17 +254,13 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
             'categories_not_to_send_file': 'config/categories_not_to_send.csv',
             'filter_rejected': True,
             'filter_unprocessed': True,
-            'filter_by_incident_id': True
+            'filter_by_datetime': True
         }
         
         # Configure logger level based on the loaded configuration
         configure_logger_level(config)
         
         logger.info("Configuration loaded from AWS Secrets Manager")
-        
-        # Get the last processed incident ID from SSM Parameter Store
-        last_incident_id = get_last_incident_id_from_ssm()
-        logger.info(f"Last processed incident ID: {last_incident_id}")
         
         # Get the last run time from SSM Parameter Store
         last_run_time = get_last_run_time_from_ssm()
@@ -280,13 +276,14 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
             archer = get_archer_auth(archer_config)
             
             logger.info("Retrieving SIR data from Archer")
-            raw_data = archer.get_sir_data(since_incident_id=last_incident_id)
+            # Use last_run_time instead of last_incident_id for retrieving data
+            raw_data = archer.get_sir_data(since_date=last_run_time)
             
         logger.info(f"Retrieved {len(raw_data)} records from Archer")
         
         # Preprocess the data
         processing_config = config['processing']
-        processed_data = preprocess(raw_data, last_incident_id, processing_config)
+        processed_data = preprocess(raw_data, last_run_time, processing_config)
         logger.info(f"Processed {len(processed_data)} records")
         
         # Send the processed data to the OPS Portal
@@ -326,28 +323,7 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
         else:
             logger.info("No records to send")
         
-        # Update the last processed incident ID if we processed any records
-        if not processed_data.empty:
-            logger.info(f"Processed data columns: {processed_data.columns.tolist()}")
-            
-            if 'Incident_ID' in processed_data.columns:
-                # Find the highest incident ID from the processed records
-                max_incident_id = processed_data['Incident_ID'].max()
-                logger.info(f"Max incident ID found: {max_incident_id}, Last incident ID: {last_incident_id}")
-                
-                if max_incident_id is not None and max_incident_id > last_incident_id:
-                    try:
-                        update_last_incident_id_in_ssm(int(max_incident_id))
-                        logger.info(f"Successfully updated last processed incident ID to: {max_incident_id}")
-                    except Exception as e:
-                        logger.error(f"Failed to update last incident ID in SSM: {str(e)}")
-                else:
-                    logger.warning(f"Not updating incident ID: max_incident_id={max_incident_id}, last_incident_id={last_incident_id}")
-            else:
-                logger.error("'Incident_ID' column not found in processed data. Available columns: " + 
-                             ", ".join(processed_data.columns.tolist()))
-        else:
-            logger.info("No records processed, not updating incident ID")
+        # We no longer need to update the last incident ID since we're using datetime filtering
         
         # Update the last run time in SSM Parameter Store
         current_time = get_current_time()
